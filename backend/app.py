@@ -165,7 +165,7 @@ def handle_pnr_verification(request_json):
             token = "".join(pnr_list)
             
             pnr_details = pnr_data.loc[pnr_to_check]
-            train_no = pnr_details['Train Number'] # Use the correct column name 'Train Number'
+            train_no = pnr_details['Train_N0'] # Use the correct column name 'Train Number'
 
             response_text = f"PNR verified for Train {train_no}. Your complaint token is {token}. Please describe your complaint."
             
