@@ -25,7 +25,7 @@ print(f"Looking for DB at: {db_path}")
 # Load PNR Data
 try:
     # Use the correct column name 'PNR Number' as the index
-    pnr_data = pd.read_csv(pnr_file_path, index_col='PNR Number') 
+    pnr_data = pd.read_csv(pnr_file_path, index_col='PNR') 
     print("✅ PNR dataset loaded successfully.")
 except Exception as e:
     print(f"❌ ERROR loading PNR data: {e}")
