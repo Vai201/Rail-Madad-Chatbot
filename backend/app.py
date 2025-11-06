@@ -8,11 +8,10 @@ import os
 
 app = Flask(__name__)
 
-# --- 1. Load Data at Startup (This is the correct path logic) ---
-# __file__ is app.py. os.path.dirname gets the 'backend' folder.
-backend_dir = os.path.dirname(os.path.abspath(__file__))
-# os.path.pardir goes "up" one level to the main project root
-project_root = os.path.abspath(os.path.join(backend_dir, os.pardir))
+# --- 1. Load Data at Startup (This is the correct path logic for Render) ---
+# We are running from the 'backend' folder (set in Render's "Root Directory")
+# so we need to go "up" one level to find the data folder.
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 
 # Build the full paths to the data files
 pnr_file_path = os.path.join(project_root, 'data', 'pnr_database.csv')
@@ -26,7 +25,7 @@ print(f"Looking for DB at: {db_path}")
 # Load PNR Data
 try:
     # Use the correct column name 'PNR Number' as the index
-    pnr_data = pd.read_csv(pnr_file_path, index_col='PNR') 
+    pnr_data = pd.read_csv(pnr_file_path, index_col='PNR Number') 
     print("✅ PNR dataset loaded successfully.")
 except Exception as e:
     print(f"❌ ERROR loading PNR data: {e}")
@@ -61,36 +60,9 @@ def handle_query_intent(request_json):
 
 def handle_phone_number(request_json):
     """Handles the 'provide_phone_number' intent."""
-    raw_input = request_json['queryResult'].get('queryText', '')
-    digits = re.findall(r'\d', raw_input)
-    phone_number_str = "".join(digits)
-    
-    if len(phone_number_str) == 10:
-        return {
-            "fulfillmentText": "Thank you. Where is the issue occurring? Please select one:",
-            "outputContexts": [
-                {
-                    "name": f"{request_json['session']}/contexts/awaiting-location",
-                    "lifespanCount": 1,
-                    "parameters": {"phone_number": phone_number_str}
-                }
-            ],
-            "payload": {
-                "richContent": [
-                    [
-                        {
-                            "type": "chips",
-                            "options": [
-                                {"text": "On a Train"},
-                                {"text": "On a Platform"}
-                            ]
-                        }
-                    ]
-                ]
-            }
-        }
-    else:
-        return {"fulfillmentText": "That doesn't seem to be a valid 10-digit number. Please try again."}
+    # This intent is now static in Dialogflow, so this function is not called.
+    # We leave it here for future use, but it won't be triggered.
+    return {"fulfillmentText": "Error: Phone handler was called, but should be static."}
 
 def handle_station_search(request_json):
     """Handles the 'provide_station_name' intent."""
@@ -99,9 +71,10 @@ def handle_station_search(request_json):
     if station_data is None:
         return {"fulfillmentText": "Error: Station database is not loaded. Please contact support."}
 
+    # Use the correct column names 'id_code' and 'station'
     station_match = station_data[
-    (station_data['Station Code'] == user_input) | 
-    (station_data['Station Name'] == user_input)
+        (station_data['id_code'] == user_input) | 
+        (station_data['station'] == user_input)
     ]
     
     if not station_match.empty:
@@ -149,23 +122,27 @@ def handle_station_confirmed(request_json):
 
 def handle_pnr_verification(request_json):
     """Handles the 'provide_pnr' intent."""
+    # 1. Get the number from Dialogflow (e.g., "0000000002" or "2")
     pnr_str = request_json['queryResult']['parameters'].get('pnr_number', '')
 
     if pnr_data is None:
         return {"fulfillmentText": "Error: PNR database is not loaded. Please contact support."}
 
     try:
-        pnr_num_str = str(pnr_str)
-        padded_pnr_num = pnr_num_str.zfill(10)
-        pnr_to_check = f"PNR{padded_pnr_num}"
+        # 2. TRANSFORM THE INPUT
+        pnr_num_str = str(int(float(pnr_str))) # Convert "2.0" -> "2"
+        padded_pnr_num = pnr_num_str.zfill(10) # "2" -> "0000000002"
+        pnr_to_check = f"PNR{padded_pnr_num}"  # "0000000002" -> "PNR0000000002"
         
+        # 3. CHECK THE DATABASE
         if pnr_to_check in pnr_data.index:
             pnr_list = list(pnr_to_check)
             random.shuffle(pnr_list)
             token = "".join(pnr_list)
             
             pnr_details = pnr_data.loc[pnr_to_check]
-            train_no = pnr_details['Train_No'] # Use the correct column name 'Train Number'
+            # Use the correct column name 'Train Number'
+            train_no = pnr_details['Train Number'] 
 
             response_text = f"PNR verified for Train {train_no}. Your complaint token is {token}. Please describe your complaint."
             
@@ -204,7 +181,8 @@ def dialogflow_webhook():
         return jsonify(handle_query_intent(request_json))
         
     elif intent_name == 'provide_phone_number':
-        return jsonify(handle_phone_number(request_json))
+        # This is now handled by Dialogflow, but we leave the router here
+        return jsonify({"fulfillmentText": "Error: Phone handler was called, but should be static."})
 
     elif intent_name == 'provide_station_name':
         return jsonify(handle_station_search(request_json))
