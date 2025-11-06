@@ -35,8 +35,9 @@ except Exception as e:
 # Load Station Data
 try:
     station_data = pd.read_csv(stations_file_path)
-    station_data['Station Name'] = station_data['Station Name'].str.lower()
-    station_data['Station Code'] = station_data['Station Code'].str.lower()
+    # Use the correct column names from your CSV: 'station' and 'id_code'
+    station_data['station'] = station_data['station'].str.lower()
+    station_data['id_code'] = station_data['id_code'].str.lower()
     print("✅ Station dataset loaded successfully.")
 except Exception as e:
     print(f"❌ ERROR loading Station data: {e}")
@@ -99,13 +100,13 @@ def handle_station_search(request_json):
         return {"fulfillmentText": "Error: Station database is not loaded. Please contact support."}
 
     station_match = station_data[
-        (station_data['Station Code'] == user_input) | 
-        (station_data['Station Name'] == user_input)
+    (station_data['Station Code'] == user_input) | 
+    (station_data['Station Name'] == user_input)
     ]
     
     if not station_match.empty:
         # Load the original CSV *again* just to get the proper capitalization
-        original_station_name = pd.read_csv(stations_file_path).iloc[station_match.index[0]].get('Station Name')
+        original_station_name = pd.read_csv(stations_file_path).iloc[station_match.index[0]].get('station')
         
         return {
             "fulfillmentText": f"Did you mean '{original_station_name}'?",
