@@ -1,20 +1,98 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>My Bot Test Page</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rail Madad Prototype</title>
+    <!-- 1. Load Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      // Set the "Inter" font family
+      tailwind.config = {
+        theme: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+        }
+      }
+    </script>
+    
+    <!-- 2. Load the Dialogflow Messenger script -->
+    <script src="https://www.gstatic.com/dialogflow-console/fast/messenger/bootstrap.js?v=1"></script>
+    
 </head>
-<body>
+<body class="bg-gradient-to-br from-blue-100 via-indigo-100 to-purple-200 font-sans">
 
-  <h1>Rail Madad Bot Test Page</h1>
-  <p>The chatbot should appear as a floating bubble in the bottom-right corner.</p>
+    <!-- Main container for the page content -->
+    <div class="flex flex-col items-center justify-center min-h-screen p-8 text-center">
 
-  <script src="https://www.gstatic.com/dialogflow-console/fast/messenger/bootstrap.js?v=1"></script>
-  <df-messenger
-    intent="WELCOME"
-    chat-title="RailMadadBot1"
-    agent-id="90616304-4bce-4e49-988b-494b05b079ff"
-    language-code="en"
-  ></df-messenger>
+        <!-- Header and Welcome Text -->
+        <div class="w-full max-w-2xl bg-white rounded-xl shadow-2xl p-8 md:p-12">
+            <h1 class="text-3xl md:text-4xl font-bold text-indigo-700">AI-Powered Rail Madad</h1>
+            <p class="text-lg text-gray-600 mt-2">Complaint System Prototype</p>
+            
+            <p class="mt-6 text-gray-700">
+                Welcome to the demonstration page. Please use the floating chat bubble in the
+                <strong class="text-indigo-600">bottom-right corner</strong> 
+                to interact with the AI assistant.
+            </p>
+            
+            <!-- UPDATED: Logos section -->
+            <div class="mt-8 pt-6 border-t border-gray-200">
+                <p class="text-sm text-gray-500 mb-4">Built and Designed For:</p>
+                <!-- Using object-contain to ensure logos scale correctly and aren't stretched -->
+                <div class="flex justify-center items-center space-x-6">
+                    <!-- Indian Railways Logo -->
+                    <img src="https://logowik.com/content/uploads/images/indian-railways-blue2669.logowik.com.webp" 
+                         alt="Indian Railways Logo" 
+                         class="h-12 object-contain"
+                         onerror="this.onerror=null;this.src='https://placehold.co/120x50?text=Indian+Railways';">
+                    
+                    <!-- CRIS Logo -->
+                    <img src="https://govtjobfix.com/wp-content/uploads/2019/07/Centre-for-Railway-Information-Systems-CRIS.png" 
+                         alt="CRIS Logo" 
+                         class="h-12 object-contain"
+                         onerror="this.onerror=null;this.src='https://placehold.co/80x50?text=CRIS';">
+                    
+                    <!-- IRCTC Logo -->
+                    <img src="https://logos-world.net/wp-content/uploads/2020/11/IRCTC-Symbol.png" 
+                         alt="IRCTC Logo" 
+                         class="h-10 object-contain"
+                         onerror="this.onerror=null;this.src='https://placehold.co/90x50?text=IRCTC';">
+                </div>
+            </div>
+            <!-- End of UPDATED section -->
+
+        </div>
+        
+        <!-- Footer (for your notes) -->
+        <div class="w-full max-w-2xl mt-6 text-left bg-white/70 backdrop-blur-sm rounded-xl shadow-lg p-6 border border-gray-200">
+            <ul class="text-xs text-gray-700 space-y-2">
+                <li>
+                    <strong class="text-gray-900">Note:</strong> This is a functional prototype built for demonstration purposes.
+                </li>
+                <li>
+                    <strong class="text-gray-900">Disclaimer:</strong> All data (PNRs, stations, etc.) is mock data and has no connection to real-world information or Indian Railways.
+                </li>
+                <li>
+                    <strong class="text-gray-900">Test PNRs:</strong> The system is loaded with PNRs from `PNR0000000001` to `PNR0000030001`. Please enter the 10-digit number (e.g., `0000000001`) to test the verification flow.
+                </li>
+            </ul>
+        </div>
+
+    </div>
+
+    <!-- 
+      This is the chatbot. By not adding 'chat-bubble="false"', 
+      it will automatically default to the floating bubble 
+      in the bottom-right corner.
+    -->
+    <df-messenger
+      intent="WELCOME"
+      chat-title="RailMadadBot1"
+      agent-id="90616304-4bce-4e49-988b-494b05b079ff"
+      language-code="en"
+    ></df-messenger>
 
 </body>
 </html>
