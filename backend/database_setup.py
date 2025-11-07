@@ -15,6 +15,19 @@ CREATE TABLE IF NOT EXISTS queries (
 ''')
 
 # (We will add the 'complaints' table in a later phase)
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS complaints (
+    complaint_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone_number TEXT,
+    pnr TEXT,
+    token TEXT,
+    station TEXT,
+    complaint_text TEXT NOT NULL,
+    department TEXT, 
+    status TEXT DEFAULT 'Open',
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+''')
 
 print("Database and 'queries' table created successfully.")
 conn.commit()
