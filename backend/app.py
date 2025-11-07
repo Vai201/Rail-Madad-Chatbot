@@ -18,41 +18,43 @@ print(f"Looking for PNR data at: {pnr_file_path}")
 print(f"Looking for Station data at: {stations_file_path}")
 print(f"Looking for DB at: {db_path}")
 
-# --- 2. RUN DATABASE SETUP (Bypasses the need for Render Shell) ---
-# This is safe to run every time, as it uses "IF NOT EXISTS"
-try:
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS queries (
-        query_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        query_text TEXT NOT NULL,
-        status TEXT DEFAULT 'Open',
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    ''')
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS complaints (
-        complaint_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        phone_number TEXT,
-        pnr TEXT,
-        token TEXT,
-        station TEXT,
-        complaint_text TEXT NOT NULL,
-        department TEXT, 
-        status TEXT DEFAULT 'Open',
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    ''')
-    print("✅ Database tables checked/created successfully.")
-    conn.commit()
-    conn.close()
-except Exception as e:
-    print(f"❌ ERROR setting up database: {e}")
+# --- 2. RUN DATABASE SETUP ---
+# This runs EVERY time the server starts, ensuring the tables always exist.
+def setup_database():
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS queries (
+            query_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            query_text TEXT NOT NULL,
+            status TEXT DEFAULT 'Open',
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS complaints (
+            complaint_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone_number TEXT,
+            pnr TEXT,
+            token TEXT,
+            station TEXT,
+            complaint_text TEXT NOT NULL,
+            department TEXT, 
+            status TEXT DEFAULT 'Open',
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        ''')
+        print("✅ Database tables checked/created successfully.")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"❌ ERROR setting up database: {e}")
+
+setup_database() # Run the setup function on startup
 
 # --- 3. Load Data at Startup ---
 try:
-    # Use the correct column name 'PNR'
     pnr_data = pd.read_csv(pnr_file_path, index_col='PNR') 
     print("✅ PNR dataset loaded successfully.")
 except Exception as e:
@@ -60,7 +62,6 @@ except Exception as e:
     pnr_data = None
 
 try:
-    # Use the correct column names 'station' and 'id_code'
     station_data_raw = pd.read_csv(stations_file_path, quotechar='"') 
     station_data_processed = station_data_raw.copy()
     station_data_processed['station'] = station_data_processed['station'].str.lower()
@@ -179,15 +180,20 @@ def handle_pnr_verification(request_json):
 def categorize_complaint(complaint_text):
     """Analyzes complaint text to route it to a department."""
     text = complaint_text.lower()
-    food_keywords = ['food', 'overpriced', 'overcharged', 'irctc', 'pantry', 'water', 'tea', 'meal', 'catering']
+    
+    # --- BUG FIX 2: Added 'bad' to the food keywords ---
+    food_keywords = ['food', 'overpriced', 'overcharged', 'irctc', 'pantry', 'water', 'tea', 'meal', 'catering', 'bad food']
     if any(keyword in text for keyword in food_keywords):
         return "IRCTC Department"
+    
     cleaning_keywords = ['clean', 'dirty', 'filthy', 'hygiene', 'washroom', 'toilet', 'coach', 'stink']
     if any(keyword in text for keyword in cleaning_keywords):
         return "Cleaning Department"
+    
     ticket_keywords = ['ticket', 'tc', 'tte', 'ticketless', 'no ticket', 'collector']
     if any(keyword in text for keyword in ticket_keywords):
         return "TICKET COLLECTOR Department"
+    
     return "General Operations"
 
 def handle_complaint_logging(request_json):
@@ -262,13 +268,14 @@ def dialogflow_webhook():
 def get_db_as_html_table(query):
     """Helper function to query the DB and return an HTML table."""
     try:
+        # --- BUG FIX 3: Run the setup function here to guarantee tables exist ---
+        setup_database() 
         conn = sqlite3.connect(db_path)
         df = pd.read_sql_query(query, conn)
         conn.close()
-        # Add some styling classes for a better look
         return df.to_html(index=False, border=1, classes="table table-striped")
     except Exception as e:
-        return f"<p>Error reading database: {e}</p>"
+        return f"<p>Error reading database: {e}. (The table may be empty.)</p>"
 
 def get_page_template(title, table_html):
     """Helper function to wrap the tables in a styled HTML page."""
@@ -324,7 +331,6 @@ def view_pnrs():
     """Shows a sample of the PNR CSV."""
     if pnr_data is None:
         return "<p>Error: PNR data is not loaded.</p>"
-    # Use reset_index() so the 'PNR' index column is visible
     table_html = pnr_data.head(100).reset_index().to_html(index=False, border=1, classes="table table-striped")
     return get_page_template("PNR Database (First 100 Rows)", table_html)
 
