@@ -55,6 +55,7 @@ setup_database() # Run the setup function on startup
 
 # --- 3. Load Data at Startup ---
 try:
+    # Use the correct column name 'PNR'
     pnr_data = pd.read_csv(pnr_file_path, index_col='PNR') 
     print("✅ PNR dataset loaded successfully.")
 except Exception as e:
@@ -62,6 +63,7 @@ except Exception as e:
     pnr_data = None
 
 try:
+    # Use the correct column names 'station' and 'id_code' and handle quotes
     station_data_raw = pd.read_csv(stations_file_path, quotechar='"') 
     station_data_processed = station_data_raw.copy()
     station_data_processed['station'] = station_data_processed['station'].str.lower()
@@ -156,7 +158,10 @@ def handle_pnr_verification(request_json):
             random.shuffle(pnr_list)
             token = "".join(pnr_list)
             pnr_details = pnr_data.loc[pnr_to_check]
+            
+            # Use the correct column name 'Train_No'
             train_no = pnr_details['Train_No'] 
+
             response_text = f"PNR verified for Train {train_no}. Your complaint token is {token}. Please describe your complaint."
             return {
                 "fulfillmentText": response_text,
@@ -181,8 +186,8 @@ def categorize_complaint(complaint_text):
     """Analyzes complaint text to route it to a department."""
     text = complaint_text.lower()
     
-    # --- BUG FIX 2: Added 'bad' to the food keywords ---
-    food_keywords = ['food', 'overpriced', 'overcharged', 'irctc', 'pantry', 'water', 'tea', 'meal', 'catering', 'bad food']
+    # --- BUG FIX: Added 'bad' to the food keywords ---
+    food_keywords = ['food', 'overpriced', 'overcharged', 'irctc', 'pantry', 'water', 'tea', 'meal', 'catering', 'bad']
     if any(keyword in text for keyword in food_keywords):
         return "IRCTC Department"
     
@@ -204,6 +209,7 @@ def handle_complaint_logging(request_json):
         token = ""
         station = ""
         phone_number = ""
+        
         contexts = request_json['queryResult']['outputContexts']
         for c in contexts:
             if 'awaiting-complaint-description' in c['name']:
@@ -215,6 +221,7 @@ def handle_complaint_logging(request_json):
                 phone_number = c['parameters'].get('phone_number', '')
 
         department = categorize_complaint(complaint_text)
+        
         if pnr:
             station = ""
         if station:
@@ -265,12 +272,12 @@ def dialogflow_webhook():
 
 # --- 6. ADMIN DASHBOARD PAGES ---
 
-def get_db_as_html_table(query):
+def get_db_as_html_table(query, db_path_to_use):
     """Helper function to query the DB and return an HTML table."""
     try:
-        # --- BUG FIX 3: Run the setup function here to guarantee tables exist ---
+        # --- BUG FIX: Run setup_database() to guarantee tables exist ---
         setup_database() 
-        conn = sqlite3.connect(db_path)
+        conn = sqlite3.connect(db_path_to_use)
         df = pd.read_sql_query(query, conn)
         conn.close()
         return df.to_html(index=False, border=1, classes="table table-striped")
@@ -323,7 +330,7 @@ def admin_dashboard():
 def view_complaints():
     """Shows the complaints table."""
     query = "SELECT * FROM complaints ORDER BY timestamp DESC"
-    table_html = get_db_as_html_table(query)
+    table_html = get_db_as_html_table(query, db_path)
     return get_page_template("Complaints Log", table_html)
 
 @app.route('/view-pnrs')
