@@ -62,7 +62,7 @@ except Exception as e:
     pnr_data = None
 
 try:
-    station_data = pd.read_csv(stations_file_path)
+    station_data = pd.read_csv(stations_file_path, quotechar='"')
     # Use the correct column names 'station' and 'id_code'
     station_data['station'] = station_data['station'].str.lower()
     station_data['id_code'] = station_data['id_code'].str.lower()
@@ -102,7 +102,7 @@ def handle_station_search(request_json):
     ]
     
     if not station_match.empty:
-        original_station_name = pd.read_csv(stations_file_path).iloc[station_match.index[0]].get('station')
+        original_station_name = pd.read_csv(stations_file_path, quotechar='"').iloc[station_match.index[0]].get('station')
         return {
             "fulfillmentText": f"Did you mean '{original_station_name}'?",
             "outputContexts": [
