@@ -1,3 +1,4 @@
+
 import sqlite3
 
 # Connect to the database (it will be created if it doesn't exist)

@@ -8,29 +8,62 @@ import os
 
 app = Flask(__name__)
 
-# --- 1. Load Data at Startup (Correct Render Path Logic) ---
+# --- 1. Define Paths ---
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 pnr_file_path = os.path.join(project_root, 'data', 'pnr_database.csv')
 stations_file_path = os.path.join(project_root, 'data', 'stations_original.csv')
-db_path = os.path.join(project_root, 'railmadad.db')
+db_path = os.path.join(project_root, 'railmadad.db') # Use a db in the root
 
 print(f"Looking for PNR data at: {pnr_file_path}")
 print(f"Looking for Station data at: {stations_file_path}")
 print(f"Looking for DB at: {db_path}")
 
-# Load PNR Data
+# --- 2. RUN DATABASE SETUP (Bypasses the need for Render Shell) ---
+# This is safe to run every time, as it uses "IF NOT EXISTS"
 try:
-    # FIX 1: Using your confirmed column name 'PNR'
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    # Create the 'queries' table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS queries (
+        query_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        query_text TEXT NOT NULL,
+        status TEXT DEFAULT 'Open',
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    ''')
+    # Create the 'complaints' table with the 'department' column
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS complaints (
+        complaint_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        phone_number TEXT,
+        pnr TEXT,
+        token TEXT,
+        station TEXT,
+        complaint_text TEXT NOT NULL,
+        department TEXT, 
+        status TEXT DEFAULT 'Open',
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    ''')
+    print("✅ Database tables checked/created successfully.")
+    conn.commit()
+    conn.close()
+except Exception as e:
+    print(f"❌ ERROR setting up database: {e}")
+
+# --- 3. Load Data at Startup ---
+try:
+    # Use the correct column name 'PNR'
     pnr_data = pd.read_csv(pnr_file_path, index_col='PNR') 
     print("✅ PNR dataset loaded successfully.")
 except Exception as e:
     print(f"❌ ERROR loading PNR data: {e}")
     pnr_data = None
 
-# Load Station Data
 try:
     station_data = pd.read_csv(stations_file_path)
-    # FIX 2: Using your confirmed column names 'station' and 'id_code'
+    # Use the correct column names 'station' and 'id_code'
     station_data['station'] = station_data['station'].str.lower()
     station_data['id_code'] = station_data['id_code'].str.lower()
     print("✅ Station dataset loaded successfully.")
@@ -38,7 +71,7 @@ except Exception as e:
     print(f"❌ ERROR loading Station data: {e}")
     station_data = None
 
-# --- 2. Helper Functions ---
+# --- 4. Helper Functions ---
 
 def handle_query_intent(request_json):
     """Handles the 'capture_user_query' intent."""
@@ -63,14 +96,12 @@ def handle_station_search(request_json):
     if station_data is None:
         return {"fulfillmentText": "Error: Station database is not loaded. Please contact support."}
     
-    # FIX 2 (continued): Using 'id_code' and 'station' to search
     station_match = station_data[
         (station_data['id_code'] == user_input) | 
         (station_data['station'] == user_input)
     ]
     
     if not station_match.empty:
-        # Use .get('station') to get the correct column
         original_station_name = pd.read_csv(stations_file_path).iloc[station_match.index[0]].get('station')
         return {
             "fulfillmentText": f"Did you mean '{original_station_name}'?",
@@ -125,7 +156,7 @@ def handle_pnr_verification(request_json):
             token = "".join(pnr_list)
             pnr_details = pnr_data.loc[pnr_to_check]
             
-            # --- FIX 3: Using your confirmed column name 'Train_N0' (with a zero) ---
+            # Use the correct column name 'Train_N0'
             train_no = pnr_details['Train_N0'] 
 
             response_text = f"PNR verified for Train {train_no}. Your complaint token is {token}. Please describe your complaint."
@@ -208,7 +239,7 @@ def handle_complaint_logging(request_json):
         print(f"Error in complaint logging: {e}")
         return {"fulfillmentText": "Sorry, there was an error lodging your complaint. Please try again."}
 
-# --- 3. Main Webhook Router ---
+# --- 5. Main Webhook Router ---
 @app.route('/webhook', methods=['POST'])
 def dialogflow_webhook():
     request_json = request.get_json()
@@ -232,7 +263,7 @@ def dialogflow_webhook():
     else:
         return jsonify({"fulfillmentText": "Error: Unrecognized intent in webhook."})
 
-# --- 4. Run the Server ---
+# --- 6. Run the Server ---
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
