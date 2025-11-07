@@ -263,7 +263,8 @@ def handle_complaint_logging(request_json):
             (phone_number, pnr, token, station, complaint_text, department)
         )
         conn.commit()
-        new_complaint_id = cursor.lastrowid
+        # FIX: Generate a random ID for the prototype
+        new_complaint_id = random.randint(1000, 9999) 
         conn.close()
         response_text = f"Thank you. Your complaint (ID: C-{new_complaint_id}) has been successfully routed to the {department}."
         return {
@@ -286,7 +287,7 @@ def dialogflow_webhook():
     if intent_name == 'capture_user_query':
         return jsonify(handle_query_intent(request_json))
     elif intent_name == 'provide_phone_number':
-        # FIX: Re-enabled the phone number webhook
+        # Re-enable the webhook for phone validation
         return jsonify(handle_phone_number(request_json))
     elif intent_name == 'provide_station_name':
         return jsonify(handle_station_search(request_json))
@@ -309,7 +310,6 @@ def get_db_as_html_table(query, db_path_to_use):
         conn = sqlite3.connect(db_path_to_use)
         df = pd.read_sql_query(query, conn)
         conn.close()
-        # Return an empty message if the dataframe is empty
         if df.empty:
             return "<p>No complaints found in the log.</p>"
         return df.to_html(index=False, border=1, classes="table table-striped")
