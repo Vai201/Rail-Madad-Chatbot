@@ -90,8 +90,36 @@ def handle_query_intent(request_json):
 
 def handle_phone_number(request_json):
     """Handles the 'provide_phone_number' intent."""
-    # This is handled by Dialogflow static response.
-    return {"fulfillmentText": "Error: Phone handler was called, but should be static."}
+    raw_input = request_json['queryResult'].get('queryText', '')
+    digits = re.findall(r'\d', raw_input)
+    phone_number_str = "".join(digits)
+    
+    if len(phone_number_str) == 10:
+        return {
+            "fulfillmentText": "Thank you. Where is the issue occurring? Please select one:",
+            "outputContexts": [
+                {
+                    "name": f"{request_json['session']}/contexts/awaiting-location",
+                    "lifespanCount": 1,
+                    "parameters": {"phone_number": phone_number_str}
+                }
+            ],
+            "payload": {
+                "richContent": [
+                    [
+                        {
+                            "type": "chips",
+                            "options": [
+                                {"text": "On a Train"},
+                                {"text": "On a Platform"}
+                            ]
+                        }
+                    ]
+                ]
+            }
+        }
+    else:
+        return {"fulfillmentText": "That doesn't seem to be a valid 10-digit number. Please try again."}
 
 def handle_station_search(request_json):
     """Handles the 'provide_station_name' intent."""
@@ -186,12 +214,12 @@ def categorize_complaint(complaint_text):
     """Analyzes complaint text to route it to a department."""
     text = complaint_text.lower()
     
-    # --- BUG FIX: Added 'bad' to the food keywords ---
+    # FIX: Added 'bad' to the food keywords
     food_keywords = ['food', 'overpriced', 'overcharged', 'irctc', 'pantry', 'water', 'tea', 'meal', 'catering', 'bad']
     if any(keyword in text for keyword in food_keywords):
         return "IRCTC Department"
     
-    cleaning_keywords = ['clean', 'dirty', 'filthy', 'hygiene', 'washroom', 'toilet', 'coach', 'stink']
+    cleaning_keywords = ['clean', 'dirty', 'filthy', 'hygiene', 'washroom', 'toilet', 'coach', 'stink', 'platform']
     if any(keyword in text for keyword in cleaning_keywords):
         return "Cleaning Department"
     
@@ -258,7 +286,8 @@ def dialogflow_webhook():
     if intent_name == 'capture_user_query':
         return jsonify(handle_query_intent(request_json))
     elif intent_name == 'provide_phone_number':
-        return jsonify({"fulfillmentText": "Error: Phone handler was called, but should be static."})
+        # FIX: Re-enabled the phone number webhook
+        return jsonify(handle_phone_number(request_json))
     elif intent_name == 'provide_station_name':
         return jsonify(handle_station_search(request_json))
     elif intent_name == 'user_confirms_station_yes':
@@ -275,11 +304,14 @@ def dialogflow_webhook():
 def get_db_as_html_table(query, db_path_to_use):
     """Helper function to query the DB and return an HTML table."""
     try:
-        # --- BUG FIX: Run setup_database() to guarantee tables exist ---
+        # Run setup_database() to guarantee tables exist
         setup_database() 
         conn = sqlite3.connect(db_path_to_use)
         df = pd.read_sql_query(query, conn)
         conn.close()
+        # Return an empty message if the dataframe is empty
+        if df.empty:
+            return "<p>No complaints found in the log.</p>"
         return df.to_html(index=False, border=1, classes="table table-striped")
     except Exception as e:
         return f"<p>Error reading database: {e}. (The table may be empty.)</p>"
