@@ -12,18 +12,16 @@ app = Flask(__name__)
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 pnr_file_path = os.path.join(project_root, 'data', 'pnr_database.csv')
 stations_file_path = os.path.join(project_root, 'data', 'stations_original.csv')
-db_path = os.path.join(project_root, 'railmadad.db') # Use a db in the root
+db_path = os.path.join(project_root, 'railmadad.db')
 
 print(f"Looking for PNR data at: {pnr_file_path}")
 print(f"Looking for Station data at: {stations_file_path}")
 print(f"Looking for DB at: {db_path}")
 
-# --- 2. RUN DATABASE SETUP (Bypasses the need for Render Shell) ---
-# This is safe to run every time, as it uses "IF NOT EXISTS"
+# --- 2. RUN DATABASE SETUP ---
 try:
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    # Create the 'queries' table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS queries (
         query_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -32,7 +30,6 @@ try:
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     ''')
-    # Create the 'complaints' table with the 'department' column
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS complaints (
         complaint_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,7 +51,6 @@ except Exception as e:
 
 # --- 3. Load Data at Startup ---
 try:
-    # Use the correct column name 'PNR'
     pnr_data = pd.read_csv(pnr_file_path, index_col='PNR') 
     print("✅ PNR dataset loaded successfully.")
 except Exception as e:
@@ -62,8 +58,7 @@ except Exception as e:
     pnr_data = None
 
 try:
-    station_data = pd.read_csv(stations_file_path, quotechar='"')
-    # Use the correct column names 'station' and 'id_code'
+    station_data = pd.read_csv(stations_file_path, quotechar='"') 
     station_data['station'] = station_data['station'].str.lower()
     station_data['id_code'] = station_data['id_code'].str.lower()
     print("✅ Station dataset loaded successfully.")
@@ -96,6 +91,7 @@ def handle_station_search(request_json):
     if station_data is None:
         return {"fulfillmentText": "Error: Station database is not loaded. Please contact support."}
     
+    user_input = user_input.strip('"') 
     station_match = station_data[
         (station_data['id_code'] == user_input) | 
         (station_data['station'] == user_input)
@@ -156,8 +152,7 @@ def handle_pnr_verification(request_json):
             token = "".join(pnr_list)
             pnr_details = pnr_data.loc[pnr_to_check]
             
-            # Use the correct column name 'Train_N0'
-            train_no = pnr_details['Train_N0'] 
+            train_no = pnr_details['Train_No'] 
 
             response_text = f"PNR verified for Train {train_no}. Your complaint token is {token}. Please describe your complaint."
             return {
@@ -182,15 +177,19 @@ def handle_pnr_verification(request_json):
 def categorize_complaint(complaint_text):
     """Analyzes complaint text to route it to a department."""
     text = complaint_text.lower()
-    food_keywords = ['food', 'overpriced', 'irctc', 'pantry', 'water', 'tea', 'meal', 'catering']
+    
+    food_keywords = ['food', 'overpriced', 'overcharged', 'irctc', 'pantry', 'water', 'tea', 'meal', 'catering']
     if any(keyword in text for keyword in food_keywords):
         return "IRCTC Department"
+    
     cleaning_keywords = ['clean', 'dirty', 'filthy', 'hygiene', 'washroom', 'toilet', 'coach', 'stink']
     if any(keyword in text for keyword in cleaning_keywords):
         return "Cleaning Department"
+    
     ticket_keywords = ['ticket', 'tc', 'tte', 'ticketless', 'no ticket', 'collector']
     if any(keyword in text for keyword in ticket_keywords):
         return "TICKET COLLECTOR Department"
+    
     return "General Operations"
 
 def handle_complaint_logging(request_json):
@@ -248,8 +247,12 @@ def dialogflow_webhook():
     except Exception:
         return jsonify({"fulfillmentText": "Error: Invalid request."})
 
+    # --- THIS IS THE FIX ---
+    # Changed handle__query_intent (2 underscores) to handle_query_intent (1 underscore)
     if intent_name == 'capture_user_query':
-        return jsonify(handle_query_intent(request_json))
+        return jsonify(handle_query_intent(request_json)) 
+    # ----------------------
+
     elif intent_name == 'provide_phone_number':
         return jsonify({"fulfillmentText": "Error: Phone handler was called, but should be static."})
     elif intent_name == 'provide_station_name':
