@@ -20,7 +20,7 @@ print(f"Looking for DB at: {db_path}")
 
 # Load PNR Data
 try:
-    # --- FIX 1: Using your new column name 'PNR' ---
+    # FIX 1: Using your confirmed column name 'PNR'
     pnr_data = pd.read_csv(pnr_file_path, index_col='PNR') 
     print("✅ PNR dataset loaded successfully.")
 except Exception as e:
@@ -30,6 +30,7 @@ except Exception as e:
 # Load Station Data
 try:
     station_data = pd.read_csv(stations_file_path)
+    # FIX 2: Using your confirmed column names 'station' and 'id_code'
     station_data['station'] = station_data['station'].str.lower()
     station_data['id_code'] = station_data['id_code'].str.lower()
     print("✅ Station dataset loaded successfully.")
@@ -61,11 +62,15 @@ def handle_station_search(request_json):
     user_input = request_json['queryResult']['parameters'].get('station_input', '').lower()
     if station_data is None:
         return {"fulfillmentText": "Error: Station database is not loaded. Please contact support."}
+    
+    # FIX 2 (continued): Using 'id_code' and 'station' to search
     station_match = station_data[
         (station_data['id_code'] == user_input) | 
         (station_data['station'] == user_input)
     ]
+    
     if not station_match.empty:
+        # Use .get('station') to get the correct column
         original_station_name = pd.read_csv(stations_file_path).iloc[station_match.index[0]].get('station')
         return {
             "fulfillmentText": f"Did you mean '{original_station_name}'?",
@@ -108,7 +113,6 @@ def handle_pnr_verification(request_json):
     """Handles the 'provide_pnr' intent."""
     pnr_str = request_json['queryResult']['parameters'].get('pnr_number', '')
     if pnr_data is None:
-        # This is the error that was happening
         return {"fulfillmentText": "Error: PNR database is not loaded. Please check server logs."}
     try:
         pnr_num_str = str(int(float(pnr_str)))
@@ -121,8 +125,8 @@ def handle_pnr_verification(request_json):
             token = "".join(pnr_list)
             pnr_details = pnr_data.loc[pnr_to_check]
             
-            # --- FIX 2: Using your new column name 'Train_No' ---
-            train_no = pnr_details['Train_No'] 
+            # --- FIX 3: Using your confirmed column name 'Train_N0' (with a zero) ---
+            train_no = pnr_details['Train_N0'] 
 
             response_text = f"PNR verified for Train {train_no}. Your complaint token is {token}. Please describe your complaint."
             return {
