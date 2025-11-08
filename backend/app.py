@@ -227,7 +227,7 @@ def categorize_complaint(complaint_text):
     if any(keyword in text for keyword in ticket_keywords):
         return "TICKET COLLECTOR Department"
     
-    return "General Operations"
+    #return "General Operations"
 
 def handle_complaint_logging(request_json):
     """Handles the final 'capture_complaint_description' intent."""
