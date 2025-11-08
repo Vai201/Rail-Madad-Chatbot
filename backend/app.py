@@ -215,7 +215,7 @@ def categorize_complaint(complaint_text):
     text = complaint_text.lower()
     
     # FIX: Added 'bad' to the food keywords
-    food_keywords = ['food', 'overpriced', 'overcharged', 'irctc', 'pantry', 'water', 'tea', 'meal', 'catering', 'bad']
+    food_keywords = ['bad food', 'overpriced', 'overcharged food', 'irctc', 'pantry', 'water', 'tea', 'meal', 'catering', 'bad']
     if any(keyword in text for keyword in food_keywords):
         return "IRCTC Department"
     
@@ -223,11 +223,11 @@ def categorize_complaint(complaint_text):
     if any(keyword in text for keyword in cleaning_keywords):
         return "Cleaning Department"
     
-    ticket_keywords = ['ticket', 'tc', 'tte', 'ticketless', 'no ticket', 'collector']
+    ticket_keywords = ['ticket', 'tc', 'tte', 'ticketless passanger', 'no ticket', 'collector']
     if any(keyword in text for keyword in ticket_keywords):
         return "TICKET COLLECTOR Department"
     
-    #return "General Operations"
+    return "General Operations"
 
 def handle_complaint_logging(request_json):
     """Handles the final 'capture_complaint_description' intent."""
