@@ -1,0 +1,14 @@
+Code: Integrated the 6-Agency logic and PNR redaction into app.py.
+
+DB Error: Still getting 10060 Timeout. Need to verify the IPv4 Whitelist in Google Cloud SQL.
+
+Tunneling: Ngrok isn't in the Windows PATH. Need to run it using the ./ngrok.exe direct path or use npx localtunnel.
+
+Next Step: Update Dialogflow Fulfillment URL once the tunnel is live.
+
+correct the tracking issue "Track Your Complaint
+Enter the 10-digit mobile number used to register your complaint to view its current status.
+
+8473283929
+Check Status
+Connection Error: Could not reach the server. Please ensure your Python backend is running on port 5000."
