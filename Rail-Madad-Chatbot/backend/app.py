@@ -68,6 +68,14 @@ def setup_database():
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         ''')
+        # New table to hold your PNR dataset
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS pnr_records (
+            pnr_number TEXT PRIMARY KEY,
+            train_no TEXT,
+            date_of_travel TEXT
+        );
+        ''')
         conn.commit()
         conn.close()
         print("✅ Cloud Database schema verified.")
@@ -101,12 +109,13 @@ def cleanup_old_complaints():
     except Exception as e:
         print(f"❌ ERROR during automated database cleanup: {e}")
 # --- 3. Load Data at Startup ---
-try:
+'''try:
     pnr_data = pd.read_csv(pnr_file_path, index_col='PNR') 
     print("✅ PNR dataset loaded successfully.")
 except Exception as e:
     print(f"❌ ERROR loading PNR data: {e}")
-    pnr_data = None
+    pnr_data = None'''
+pnr_data = None # Placeholder to prevent errors in other parts of the script
 
 try:
     station_data_raw = pd.read_csv(stations_file_path, quotechar='"') 
@@ -165,28 +174,32 @@ def handle_phone_number(request_json):
 
 def handle_station_search(request_json):
     user_input = request_json['queryResult']['parameters'].get('station_input', '').lower().strip('"')
-    if station_data_processed is None:
-        return {"fulfillmentText": "Error: Station database is not loaded. Please contact support."}
     
-    station_match = station_data_processed[
-        (station_data_processed['id_code'] == user_input) | 
-        (station_data_processed['station'] == user_input)
-    ]
-    
-    if not station_match.empty:
-        original_station_name = station_data_raw.iloc[station_match.index[0]].get('station')
-        return {
-            "fulfillmentText": f"Did you mean '{original_station_name}'?",
-            "outputContexts": [
-                {
-                    "name": f"{request_json['session']}/contexts/awaiting-station-confirmation",
-                    "lifespanCount": 1,
-                    "parameters": {"station_confirmed": original_station_name}
-                }
-            ]
-        }
-    else:
-        return {"fulfillmentText": "Sorry, I couldn't find that station. Please try the name or code again."}
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        # Search by code or name in the SQL table
+        cursor.execute("SELECT station_name FROM stations WHERE id_code = %s OR LOWER(station_name) = %s", (user_input, user_input))
+        result = cursor.fetchone()
+        conn.close()
+        
+        if result:
+            original_station_name = result[0]
+            return {
+                "fulfillmentText": f"Did you mean '{original_station_name}'?",
+                "outputContexts": [
+                    {
+                        "name": f"{request_json['session']}/contexts/awaiting-station-confirmation",
+                        "lifespanCount": 1,
+                        "parameters": {"station_confirmed": original_station_name}
+                    }
+                ]
+            }
+        else:
+            return {"fulfillmentText": "Sorry, I couldn't find that station. Please try the name or code again."}
+    except Exception as e:
+        print(f"Error in station search: {e}")
+        return {"fulfillmentText": "Station database error. Please try again later."}
 
 def handle_station_confirmed(request_json):
     try:
@@ -212,26 +225,25 @@ def handle_station_confirmed(request_json):
         return {"fulfillmentText": "An error occurred. Please try again."}
 
 def handle_pnr_verification(request_json):
-    pnr_str = request_json['queryResult']['parameters'].get('pnr_number', '')
-    if pnr_data is None:
-        return {"fulfillmentText": "Error: PNR database is not loaded. Please check server logs."}
+    # 1. Get the PNR from Dialogflow parameters
+    pnr_input = request_json['queryResult']['parameters'].get('pnr_number', '')
+    
+    # 2. Clean the input (remove "PNR" prefix if user typed it, keep only digits)
+    pnr_digits = "".join(re.findall(r'\d', str(pnr_input)))
+    
     try:
-        pnr_num_str = str(int(float(pnr_str)))
-        padded_pnr_num = pnr_num_str.zfill(10)
-        pnr_to_check = f"PNR{padded_pnr_num}"
-        
-        if pnr_to_check in pnr_data.index:
-            pnr_list = list(pnr_to_check)
-            random.shuffle(pnr_list)
-            token = "".join(pnr_list)
-            pnr_details = pnr_data.loc[pnr_to_check]
-            
-            train_no = pnr_details['Train_No'] 
-            
-            # --- UPDATE 1: Extract the date using your exact CSV header ---
-            travel_date = str(pnr_details.get('Date_of_Travel', 'Not Available'))
+        # 3. Connect to SQL and search the new pnr_records table
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT train_no, date_of_travel FROM pnr_records WHERE pnr_number = %s", (pnr_digits,))
+        result = cursor.fetchone()
+        conn.close()
 
-            # --- UPDATE 2: Add the date to the bot's response ---
+        if result:
+            train_no, travel_date = result
+            # Create a unique token for this session
+            token = f"TK-{random.randint(1000, 9999)}"
+            
             response_text = f"PNR verified for Train {train_no} on {travel_date}. Your complaint token is {token}. Please describe your complaint."
             
             return {
@@ -242,18 +254,19 @@ def handle_pnr_verification(request_json):
                         "lifespanCount": 1,
                         "parameters": {
                             "complaint_token": token,
-                            "pnr": pnr_to_check,
-                            # --- UPDATE 3: Pass the date to the next context ---
+                            "pnr": pnr_digits,
                             "travel_date": travel_date 
                         }
                     }
                 ]
             }
         else:
-            return {"fulfillmentText": "That PNR was not found in our records. Please try again."}
+            # This triggers if the PNR isn't in your SQL table yet
+            return {"fulfillmentText": f"PNR {pnr_digits} not found. Please ensure you have imported your CSV to the Cloud SQL 'pnr_records' table."}
+            
     except Exception as e:
         print(f"Error in PNR check: {e}")
-        return {"fulfillmentText": "That doesn't seem to be a valid PNR. Please enter a 10-digit PNR."}
+        return {"fulfillmentText": "System error connecting to database. Please try again."}
 
 def categorize_complaint(complaint_text):
     text = complaint_text.lower()
@@ -534,10 +547,15 @@ def view_complaints():
 
 @app.route('/view-pnrs')
 def view_pnrs():
-    if pnr_data is None:
-        return "<p>Error: PNR data is not loaded.</p>"
-    table_html = pnr_data.head(100).reset_index().to_html(index=False, border=1, classes="table table-striped")
-    return get_page_template("PNR Database (First 100 Rows)", table_html)
+    # Fetch data directly from the SQL table
+    query = "SELECT * FROM pnr_records LIMIT 100"
+    table_html = get_db_as_html_table(query)
+    
+    # If the table is empty, show a helpful message
+    if "No complaints found" in table_html or "error" in table_html.lower():
+        table_html = "<p>No PNR records found. Please import your CSV into the 'pnr_records' table in Cloud SQL.</p>"
+        
+    return get_page_template("PNR Database (SQL Cloud Storage)", table_html)
 
 @app.route('/view-stations')
 def view_stations():
