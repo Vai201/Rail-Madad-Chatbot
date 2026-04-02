@@ -343,7 +343,7 @@ def handle_complaint_logging(request_json):
         parameters = request_json['queryResult']['parameters']
         complaint_text = parameters.get('complaint_text', '')
         
-        # --- FIX: INITIALIZE VARIABLES FIRST ---
+        # 1. Initialize variables and retrieve from Dialogflow Contexts
         pnr = ""
         token = ""
         station = ""
@@ -352,7 +352,6 @@ def handle_complaint_logging(request_json):
         
         contexts = request_json['queryResult']['outputContexts']
         for c in contexts:
-            # We use .get() and .get('parameters', {}) to safely access nested data
             if 'awaiting-complaint-description' in c.get('name', ''):
                 params = c.get('parameters', {})
                 pnr = params.get('pnr', '') 
@@ -362,14 +361,14 @@ def handle_complaint_logging(request_json):
             if 'awaiting-location' in c.get('name', ''):
                 phone_number = c.get('parameters', {}).get('phone_number', '')
 
-        # --- 2. Apply Business Logic ---
+        # 2. Identify Department (Categorization)
         dept = categorize_complaint(complaint_text)
         
-        # Assign Agency based on PNR Number
+        # 3. Agency Assignment Logic
+        # Assigns Agency based on PNR range as per your original requirement
         agency = "Internal Staff"
         if pnr:
             try:
-                # Use re.search safely
                 pnr_match = re.search(r'\d+', pnr)
                 if pnr_match:
                     pnr_num = int(pnr_match.group())
@@ -382,23 +381,22 @@ def handle_complaint_logging(request_json):
             except Exception as e:
                 print(f"Agency assignment error: {e}")
 
-        # Data Redaction Logic
-        pnr_to_store = pnr
-        if dept not in ["Security", "Medical Assistance"]:
-            pnr_to_store = token if token else "REDACTED"
+        # 4. PRIVACY LOGIC: Full Data vs. Redacted
+        if dept in ["Security", "Medical Assistance"]:
+            pnr_to_store = pnr  # Full PNR for RPF/Medical
+        else:
+            pnr_to_store = f"REDACTED ({token})" # Hidden for others
 
-        # Randomized Status for Mock Demo
+        # 5. Mock Resolution Logic (Randomly closing some complaints)
         status = "Open"
         closing_msg = ""
-        if random.random() < 0.3:
+        if random.random() < 0.3: # 30% chance to be auto-resolved for the demo
             status = "Closed"
             closing_msg = get_random_closing_statement(dept)
 
-        # --- 3. Save to Cloud Database ---
+        # 6. Save to Cloud Database
         conn = get_db_connection()
         cursor = conn.cursor()
-        
-        # NOTE: Ensure your SQL table has the 'agency' and 'closing_statement' columns!
         cursor.execute(
             """INSERT INTO bot_complaints 
                (phone_number, pnr, token, station, travel_date, complaint_text, department, agency, status, closing_statement) 
@@ -409,6 +407,7 @@ def handle_complaint_logging(request_json):
         conn.commit()
         conn.close()
 
+        # 7. Final Response to User
         msg = f"Complaint registered (ID: C-{new_id}) routed to {dept} ({agency})."
         if status == "Closed":
             msg += f" Update: {closing_msg}"
@@ -559,9 +558,9 @@ def view_pnrs():
 
 @app.route('/view-stations')
 def view_stations():
-    if station_data_raw is None:
-        return "<p>Error: Station data is not loaded.</p>"
-    table_html = station_data_raw.head(100).to_html(index=False, border=1, classes="table table-striped")
+    # This now asks the SQL database instead of looking for a CSV file
+    query = "SELECT * FROM stations LIMIT 100" 
+    table_html = get_db_as_html_table(query)
     return get_page_template("Station Database (First 100 Rows)", table_html)
 
 # --- 7. Run the Server ---
