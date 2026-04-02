@@ -494,7 +494,7 @@ def get_db_as_html_table(query):
             df = pd.read_sql_query(query, conn)
         conn.close()
         if df.empty:
-            return "<p>No complaints found in the log.</p>"
+            return "<p>No records found in this database table.</p>"
         return df.to_html(index=False, border=1, classes="table table-striped")
     except Exception as e:
         return f"<p>Error reading database: {e}. (The table may be empty.)</p>"
