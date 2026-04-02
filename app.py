@@ -505,19 +505,35 @@ def get_page_template(title, table_html):
         <head>
             <title>{title}</title>
             <style>
-                body {{ font-family: Arial, sans-serif; padding: 20px; }}
+                body {{ font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; }}
                 h1 {{ color: #333; }}
-                .table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-                .table th, .table td {{ padding: 8px; text-align: left; border: 1px solid #ddd; }}
-                .table th {{ background-color: #f2f2f2; }}
-                .table tr:nth-child(even) {{ background-color: #f9f9f9; }}
-                a {{ font-size: 1.2em; }}
+                
+                /* This container makes the table scrollable side-to-side */
+                .table-container {{ overflow-x: auto; width: 100%; border: 1px solid #ddd; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }}
+                
+                /* The table itself */
+                .table {{ width: 100%; border-collapse: collapse; margin-top: 0; white-space: nowrap; }}
+                .table th, .table td {{ padding: 12px 16px; text-align: left; border-bottom: 1px solid #ddd; }}
+                
+                /* Blue sticky header so it stays visible when scrolling down */
+                .table th {{ background-color: #1a73e8; color: white; position: sticky; top: 0; z-index: 10; }}
+                
+                /* Alternating row colors for readability */
+                .table tr:nth-child(even) {{ background-color: #f8f9fa; }}
+                .table tr:hover {{ background-color: #f1f1f1; }}
+                
+                a {{ font-size: 1.2em; color: #1a73e8; text-decoration: none; display: inline-block; margin-bottom: 15px; }}
+                a:hover {{ text-decoration: underline; }}
             </style>
         </head>
         <body>
             <h1>{title}</h1>
-            <p><a href="/admin">Back to Admin Dashboard</a></p>
-            {table_html}
+            <p><a href="/admin">⬅ Back to Admin Dashboard</a></p>
+            
+            <div class="table-container">
+                {table_html}
+            </div>
+            
         </body>
     </html>
     """
