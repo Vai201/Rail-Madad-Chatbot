@@ -27,11 +27,12 @@ DB_USER = "postgres"
 DB_PASS = os.getenv("DB_PASS")
 
 def get_db_connection():
+    # We use the /cloudsql/ prefix followed by your Instance Connection Name
     return psycopg2.connect(
-        host=DB_HOST,
-        database=DB_NAME,
-        user=DB_USER,
-        password=DB_PASS
+        database="postgres",
+        user="postgres",
+        password=os.getenv("DB_PASS"), 
+        host="/cloudsql/project-f988ee73-0741-4016-82c:asia-south1:rail-madad-db"
     )
 
 print(f"Looking for PNR data at: {pnr_file_path}")
