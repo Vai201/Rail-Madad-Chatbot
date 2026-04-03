@@ -391,7 +391,6 @@ def handle_complaint_logging(request_json):
         complaint_text = parameters.get('complaint_text', '')
         
         # 1. Initialize variables and retrieve from Dialogflow Contexts
-        # Ensure these are initialized as empty strings before the loop
         pnr = ""
         token = ""
         station = ""
@@ -411,7 +410,6 @@ def handle_complaint_logging(request_json):
                 pnr = params.get('pnr', pnr) 
                 token = params.get('complaint_token', token)
                 station = params.get('station_confirmed', station)
-                # This catches the date once you change the Entity to @sys.date
                 if not travel_date:
                     travel_date = params.get('travel_date', '')
 
@@ -419,7 +417,6 @@ def handle_complaint_logging(request_json):
         dept = categorize_complaint(complaint_text)
         
         # 3. Agency Assignment Logic
-        # Assigns Agency based on PNR range as per your original requirement
         agency = "Internal Staff"
         if pnr:
             try:
@@ -441,12 +438,9 @@ def handle_complaint_logging(request_json):
         else:
             pnr_to_store = f"REDACTED ({token})" # Hidden for others
 
-        # 5. Mock Resolution Logic (Randomly closing some complaints)
+        # 5. ALL Complaints start as 'Open' (No instant closing)
         status = "Open"
-        closing_msg = ""
-        if random.random() < 0.3: # 30% chance to be auto-resolved for the demo
-            status = "Closed"
-            closing_msg = get_random_closing_statement(dept)
+        closing_msg = "" 
 
         # 6. Save to Cloud Database
         conn = get_db_connection()
@@ -461,12 +455,30 @@ def handle_complaint_logging(request_json):
         conn.commit()
         conn.close()
 
-        # 7. Final Response to User
-        msg = f"Complaint registered (ID: C-{new_id}) routed to {dept} ({agency})."
-        if status == "Closed":
-            msg += f" Update: {closing_msg}"
+        # 7. Final Response to User (Using Multi-Bubble Logic)
+        base_msg = f"Complaint registered (ID: C-{new_id}) routed to {dept} ({agency})."
+        
+        # Format the response as a list of messages for separate chat bubbles
+        reply_payload = {
+            "fulfillmentMessages": [
+                {
+                    "text": {
+                        "text": [base_msg]
+                    }
+                }
+            ]
+        }
+        
+        # If it is an emergency, add a SECOND text bubble to the chat
+        if dept in ["Security", "Medical Assistance"]:
+            emergency_alert = f"🚨 EMERGENCY ACTION: On-duty {dept} personnel have been alerted and are being dispatched to your location instantly."
+            reply_payload["fulfillmentMessages"].append({
+                "text": {
+                    "text": [emergency_alert]
+                }
+            })
             
-        return {"fulfillmentText": msg}
+        return reply_payload
 
     except Exception as e:
         print(f"Error in complaint logging: {e}")
