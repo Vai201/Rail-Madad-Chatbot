@@ -191,7 +191,7 @@ def handle_station_search(request_json):
         # Make sure this table exists in your Cloud SQL! 
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT station_name FROM stations WHERE id_code = %s OR LOWER(station_name) = %s", (user_input, user_input))
+        cursor.execute("SELECT station FROM stations WHERE id_code = %s OR LOWER(station) = %s", (user_input, user_input))
         result = cursor.fetchone()
         conn.close()
         
