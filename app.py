@@ -234,14 +234,23 @@ def handle_pnr_verification(request_json):
     # 1. Get the PNR from Dialogflow parameters
     pnr_input = request_json['queryResult']['parameters'].get('pnr_number', '')
     
-    # 2. Clean the input (remove "PNR" prefix if user typed it, keep only digits)
-    pnr_digits = "".join(re.findall(r'\d', str(pnr_input)))
+    # FIX: Safely handle Dialogflow's float conversion (e.g., turning 51.0 or "51.0" into "51")
+    pnr_input_str = str(pnr_input)
+    if "." in pnr_input_str:
+        pnr_input_str = pnr_input_str.split(".")[0]
+        
+    # 2. Extract just the digits
+    pnr_digits = "".join(re.findall(r'\d', pnr_input_str))
+    
+    # FIX: Pad with leading zeros to make it 10 digits, and add "PNR" prefix
+    # If they typed "51", it becomes "0000000051" -> "PNR0000000051"
+    db_pnr_format = f"PNR{pnr_digits.zfill(10)}"
     
     try:
-        # 3. Connect to SQL and search the new pnr_records table
+        # 3. Connect to SQL and search using the exact database format
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT train_no, date_of_travel FROM pnr_records WHERE pnr_number = %s", (pnr_digits,))
+        cursor.execute("SELECT train_no, date_of_travel FROM pnr_records WHERE pnr_number = %s", (db_pnr_format,))
         result = cursor.fetchone()
         conn.close()
 
@@ -260,15 +269,15 @@ def handle_pnr_verification(request_json):
                         "lifespanCount": 1,
                         "parameters": {
                             "complaint_token": token,
-                            "pnr": pnr_digits,
+                            "pnr": db_pnr_format, # Pass the properly formatted PNR!
                             "travel_date": travel_date 
                         }
                     }
                 ]
             }
         else:
-            # This triggers if the PNR isn't in your SQL table yet
-            return {"fulfillmentText": f"PNR {pnr_digits} not found. Please ensure you have imported your CSV to the Cloud SQL 'pnr_records' table."}
+            # Notice the new error message text!
+            return {"fulfillmentText": f"{db_pnr_format} not found in the database. Please check your ticket and try again."}
             
     except Exception as e:
         print(f"Error in PNR check: {e}")
