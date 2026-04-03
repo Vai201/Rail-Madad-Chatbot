@@ -116,7 +116,12 @@ def cleanup_old_complaints():
 except Exception as e:
     print(f"❌ ERROR loading PNR data: {e}")
     pnr_data = None'''
-pnr_data = None # Placeholder to prevent errors in other parts of the script
+# --- 3. Load Data at Startup ---
+# We no longer load CSVs locally because we migrated to Cloud SQL!
+pnr_data = None 
+station_data_raw = None
+station_data_processed = None
+print("✅ Skipping local CSV load - connected directly to Cloud SQL.")
 
 try:
     station_data_raw = pd.read_csv(stations_file_path, quotechar='"') 
