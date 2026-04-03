@@ -3,6 +3,7 @@ import random
 import re
 import pandas as pd
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import psycopg2
 import os
 from dotenv import load_dotenv # <-- Add this line near your other imports
@@ -10,13 +11,16 @@ from dotenv import load_dotenv # <-- Add this line near your other imports
 load_dotenv() # <-- Add this line right after your imports
 
 app = Flask(__name__)
-
+CORS(app)
 @app.route('/')
 def home():
     return "Rail Madad Chatbot Backend is Live!"
 
 # --- 1. Define Paths & Cloud DB Credentials ---
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+# --- 1. Define Paths & Cloud DB Credentials ---
+# We removed os.pardir so it stays inside the rail_madad_chatbot folder
+project_root = os.path.abspath(os.path.dirname(__file__))
+
 pnr_file_path = os.path.join(project_root, 'data', 'pnr_database.csv')
 stations_file_path = os.path.join(project_root, 'data', 'stations_original.csv')
 
@@ -180,11 +184,13 @@ def handle_phone_number(request_json):
 
 def handle_station_search(request_json):
     user_input = request_json['queryResult']['parameters'].get('station_input', '').lower().strip('"')
+    session_id = request_json['session']
     
     try:
+        # Note: In your original code you queried a table named 'stations'. 
+        # Make sure this table exists in your Cloud SQL! 
         conn = get_db_connection()
         cursor = conn.cursor()
-        # Search by code or name in the SQL table
         cursor.execute("SELECT station_name FROM stations WHERE id_code = %s OR LOWER(station_name) = %s", (user_input, user_input))
         result = cursor.fetchone()
         conn.close()
@@ -195,17 +201,35 @@ def handle_station_search(request_json):
                 "fulfillmentText": f"Did you mean '{original_station_name}'?",
                 "outputContexts": [
                     {
-                        "name": f"{request_json['session']}/contexts/awaiting-station-confirmation",
+                        "name": f"{session_id}/contexts/awaiting-station-confirmation",
                         "lifespanCount": 1,
                         "parameters": {"station_confirmed": original_station_name}
                     }
                 ]
             }
         else:
-            return {"fulfillmentText": "Sorry, I couldn't find that station. Please try the name or code again."}
+            # If not found, tell the user AND kill the context so they aren't stuck in a loop
+            return {
+                "fulfillmentText": "Sorry, I couldn't find that station in the database. Please type 'hi' to start over or try another name.",
+                "outputContexts": [
+                     {
+                         # Setting lifespanCount to 0 clears the current context memory
+                        "name": f"{session_id}/contexts/awaiting-location",
+                        "lifespanCount": 0 
+                     }
+                ]
+            }
     except Exception as e:
         print(f"Error in station search: {e}")
-        return {"fulfillmentText": "Station database error. Please try again later."}
+        return {
+            "fulfillmentText": "Station database error. Please type 'hi' to restart your complaint.",
+            "outputContexts": [
+                 {
+                    "name": f"{session_id}/contexts/awaiting-location",
+                    "lifespanCount": 0 
+                 }
+            ]
+        }
 
 def handle_station_confirmed(request_json):
     try:
@@ -439,29 +463,6 @@ def handle_complaint_logging(request_json):
         return {"fulfillmentText": "Sorry, there was an error lodging your complaint. Please try again."}
 
 # --- 5. Main Webhook Router ---
-@app.route('/webhook', methods=['POST'])
-def dialogflow_webhook():
-    request_json = request.get_json()
-    try:
-        intent_name = request_json['queryResult']['intent']['displayName']
-    except Exception:
-        return jsonify({"fulfillmentText": "Error: Invalid request."})
-
-    if intent_name == 'capture_user_query':
-        return jsonify(handle_query_intent(request_json))
-    elif intent_name == 'provide_phone_number':
-        return jsonify(handle_phone_number(request_json))
-    elif intent_name == 'provide_station_name':
-        return jsonify(handle_station_search(request_json))
-    elif intent_name == 'user_confirms_station_yes':
-        return jsonify(handle_station_confirmed(request_json))
-    elif intent_name == 'provide_pnr':
-        return jsonify(handle_pnr_verification(request_json))
-    elif intent_name == 'capture_complaint_description':
-        return jsonify(handle_complaint_logging(request_json))
-    else:
-        return jsonify({"fulfillmentText": "Error: Unrecognized intent in webhook."})
-
 @app.route('/api/track', methods=['POST'])
 def track_by_phone():
     data = request.get_json()
@@ -474,9 +475,34 @@ def track_by_phone():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Fetch all complaints linked to this exact phone number
+        # --- NEW LOGIC: AUTO-CLOSE STALE COMPLAINTS ---
+        # 1. Find Open complaints older than 1 minute for this user
+        cursor.execute("""
+            SELECT complaint_id, department FROM bot_complaints 
+            WHERE phone_number = %s AND status = 'Open' 
+            AND timestamp <= NOW() - INTERVAL '1 minute'
+        """, (phone_number,))
+        stale_complaints = cursor.fetchall()
+        
+        # 2. Update them with random closing statements
+        for row in stale_complaints:
+            comp_id = row[0]
+            dept = row[1]
+            closing_statement = get_random_closing_statement(dept)
+            
+            cursor.execute("""
+                UPDATE bot_complaints 
+                SET status = 'Closed', closing_statement = %s 
+                WHERE complaint_id = %s
+            """, (closing_statement, comp_id))
+        
+        if stale_complaints:
+            conn.commit() # Save the auto-closes to the database
+        # ----------------------------------------------
+        
+        # Now fetch the (potentially updated) records to show the user
         cursor.execute(
-            "SELECT complaint_id, department, status, timestamp, complaint_text FROM bot_complaints WHERE phone_number = %s ORDER BY timestamp DESC",
+            "SELECT complaint_id, department, status, timestamp, complaint_text, closing_statement FROM bot_complaints WHERE phone_number = %s ORDER BY timestamp DESC",
             (phone_number,)
         )
         records = cursor.fetchall()
@@ -485,15 +511,18 @@ def track_by_phone():
         if not records:
             return jsonify({"message": "No complaints found for this number.", "complaints": []})
 
-        # Package the data neatly for your HTML/JS frontend to read
         complaints_list = []
         for row in records:
+            # We now grab the closing statement (row[5]) if it exists
+            resolution_text = row[5] if row[5] else ""
+            
             complaints_list.append({
                 "id": f"C-{row[0]}",
                 "department": row[1],
                 "status": row[2],
                 "date": row[3].strftime("%Y-%m-%d %H:%M"),
-                "description": row[4]
+                "description": row[4],
+                "resolution": resolution_text # Send the closing statement to the frontend
             })
 
         return jsonify({"message": "Success", "complaints": complaints_list})

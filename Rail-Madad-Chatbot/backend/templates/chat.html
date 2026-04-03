@@ -6,7 +6,6 @@
     <title>Rail Madad Prototype</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-      // Set the "Inter" font family
       tailwind.config = {
         theme: {
           fontFamily: {
@@ -15,9 +14,6 @@
         }
       }
     </script>
-    
-    <script src="https://www.gstatic.com/dialogflow-console/fast/messenger/bootstrap.js?v=1"></script>
-    
 </head>
 <body class="bg-gradient-to-br from-blue-100 via-indigo-100 to-purple-200 font-sans">
 
@@ -75,16 +71,8 @@
 
     </div>
 
-    <df-messenger
-      intent="WELCOME"
-      chat-title="RailMadad"
-      agent-id="90616304-4bce-4e49-988b-494b05b079ff"
-      language-code="en"
-    ></df-messenger>
-
     <script>
     async function trackComplaint() {
-        // 1. Bug fixed: using phoneNumber consistently
         const phoneNumber = document.getElementById('trackPhoneInput').value.trim();
         const resultsDiv = document.getElementById('trackingResults');
 
@@ -94,20 +82,20 @@
             return;
         }
 
-        // Loading state
         resultsDiv.innerHTML = `<div class="p-4 text-indigo-600 animate-pulse text-center font-medium">Connecting to secure database...</div>`;
 
         try {
-            // 2. Fetch using your Localtunnel
-            const response = await fetch('https://three-snails-double.loca.lt/api/track', {
+            // IMPORTANT: Update this URL with your CURRENT Localtunnel URL before your demo
+            const TUNNEL_URL = 'https://three-snails-double.loca.lt'; 
+            
+            const response = await fetch(`${TUNNEL_URL}/api/track`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ phone_number: phoneNumber }) // Fixed variable name here!
+                body: JSON.stringify({ phone_number: phoneNumber })
             });
 
             const data = await response.json();
 
-            // Handle response
             if (data.complaints && data.complaints.length > 0) {
                 let htmlOutput = `<h3 class="font-bold text-gray-800 mb-3 border-b pb-2">Found ${data.complaints.length} Record(s):</h3><div class="space-y-4">`;
                 
@@ -116,7 +104,6 @@
                     const statusColor = isClosed ? 'text-green-600 bg-green-50' : 'text-orange-600 bg-orange-50';
                     const resolutionColor = isClosed ? 'text-green-700 bg-green-100/50' : 'text-gray-600 bg-gray-100';
                     
-                    // 3. Added Agency and Resolution display
                     htmlOutput += `
                         <div class="p-4 border border-gray-200 rounded-lg bg-white shadow-sm relative">
                             <span class="absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-bold ${statusColor} border border-current">
@@ -127,14 +114,14 @@
                             <div class="font-bold text-indigo-700 text-lg mb-1">
                                 ${complaint.id} 
                                 <span class="text-gray-500 font-normal text-sm ml-2">
-                                    (${complaint.department} • ${complaint.agency || 'Internal'})
+                                    (${complaint.department})
                                 </span>
                             </div>
                             
                             <p class="text-gray-800 mb-3 italic">"${complaint.description}"</p>
                             
                             <div class="text-sm font-medium p-2 rounded ${resolutionColor} border ${isClosed ? 'border-green-200' : 'border-gray-200'}">
-                                ↳ Action: ${complaint.resolution || 'Investigation pending...'}
+                                ↳ Status Update: ${complaint.resolution || 'Investigation in progress...'}
                             </div>
                         </div>`;
                 });
@@ -147,10 +134,18 @@
 
         } catch (error) {
             console.error("Error connecting to backend:", error);
-            resultsDiv.innerHTML = `<div class="p-4 bg-red-50 text-red-600 rounded-lg border border-red-200"><strong>Connection Error:</strong> Could not reach the server. Please ensure your Python backend is running and the Localtunnel URL is correct.</div>`;
+            resultsDiv.innerHTML = `<div class="p-4 bg-red-50 text-red-600 rounded-lg border border-red-200"><strong>Connection Error:</strong> Could not reach the server. Ensure your Python backend is running and the Localtunnel URL is correct.</div>`;
         }
     }
     </script>
+
+    <script src="https://www.gstatic.com/dialogflow-console/fast/messenger/bootstrap.js?v=1"></script>
+    <df-messenger
+        intent="WELCOME"
+        chat-title="RailMadadBot1"
+        agent-id="90616304-4bce-4e49-988b-494b05b079ff"
+        language-code="en"
+    ></df-messenger>
 
 </body>
 </html>
