@@ -256,10 +256,15 @@ def handle_pnr_verification(request_json):
 
         if result:
             train_no, travel_date = result
-            # Create a unique token for this session
-            token = f"TK-{random.randint(1000, 9999)}"
             
-            response_text = f"PNR verified for Train {train_no} on {travel_date}. Your complaint token is {token}. Please describe your complaint."
+            # FIX 1: Create a token by shuffling the user's actual PNR digits
+            pnr_list = list(pnr_digits)
+            random.shuffle(pnr_list)
+            shuffled_pnr = "".join(pnr_list)
+            token = f"TK-{shuffled_pnr[:6]}" # Uses the first 6 shuffled digits
+            
+            # FIX 2: Hide the token from the user, just ask for the complaint
+            response_text = f"PNR verified for Train {train_no} on {travel_date}. Please describe your complaint."
             
             return {
                 "fulfillmentText": response_text,
@@ -268,8 +273,8 @@ def handle_pnr_verification(request_json):
                         "name": f"{request_json['session']}/contexts/awaiting-complaint-description",
                         "lifespanCount": 1,
                         "parameters": {
-                            "complaint_token": token,
-                            "pnr": db_pnr_format, # Pass the properly formatted PNR!
+                            "complaint_token": token,  # The token lives secretly in the background here!
+                            "pnr": db_pnr_format, 
                             "travel_date": travel_date 
                         }
                     }
