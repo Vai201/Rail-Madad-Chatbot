@@ -85,16 +85,19 @@
         resultsDiv.innerHTML = `<div class="p-4 text-indigo-600 animate-pulse text-center font-medium">Connecting to secure database...</div>`;
 
         try {
-            // IMPORTANT: Update this URL with your CURRENT Localtunnel URL before your demo
-            const TUNNEL_URL = 'https://three-snails-double.loca.lt'; 
+            // Your permanent Google Cloud Run URL!
+            const BACKEND_URL = 'https://rail-madad-chatbot-1094417494880.asia-south1.run.app'; 
             
-            const response = await fetch(`${TUNNEL_URL}/api/track`, {
+            const response = await fetch(`${BACKEND_URL}/api/track`, {
                 method: 'POST',
+                // Look! We get to remove the Localtunnel Bypass hack!
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phone_number: phoneNumber })
             });
 
             const data = await response.json();
+            
+            // ... the rest of the code (if data.complaints...) remains exactly the same ...
 
             if (data.complaints && data.complaints.length > 0) {
                 let htmlOutput = `<h3 class="font-bold text-gray-800 mb-3 border-b pb-2">Found ${data.complaints.length} Record(s):</h3><div class="space-y-4">`;

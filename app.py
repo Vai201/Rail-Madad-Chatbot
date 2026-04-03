@@ -463,6 +463,36 @@ def handle_complaint_logging(request_json):
         return {"fulfillmentText": "Sorry, there was an error lodging your complaint. Please try again."}
 
 # --- 5. Main Webhook Router ---
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    req = request.get_json(silent=True)
+    
+    # Get the name of the intent from Dialogflow
+    intent_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
+
+    # Route to the correct helper function based on the intent
+    if intent_name == 'provide_phone_number':
+        return jsonify(handle_phone_number(req))
+        
+    elif intent_name == 'provide_station_name':
+        return jsonify(handle_station_search(req))
+        
+    elif intent_name == 'user_confirms_station_yes':
+        return jsonify(handle_station_confirmed(req))
+        
+    elif intent_name == 'provide_pnr':
+        return jsonify(handle_pnr_verification(req))
+        
+    elif intent_name == 'capture_complaint_description':
+        return jsonify(handle_complaint_logging(req))
+
+    elif intent_name == 'capture_user_query':
+        return jsonify(handle_query_intent(req))
+
+    # Fallback if intent is not recognized or doesn't need backend processing
+    return jsonify({"fulfillmentText": "Webhook received the intent, but no backend action was required."})
+
+
 @app.route('/api/track', methods=['POST'])
 def track_by_phone():
     data = request.get_json()
