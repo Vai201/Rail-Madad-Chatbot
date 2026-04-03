@@ -161,7 +161,7 @@ def handle_phone_number(request_json):
             "outputContexts": [
                 {
                     "name": f"{request_json['session']}/contexts/awaiting-location",
-                    "lifespanCount": 1,
+                    "lifespanCount": 10,
                     "parameters": {"phone_number": phone_number_str}
                 }
             ],
@@ -191,7 +191,10 @@ def handle_station_search(request_json):
         # Make sure this table exists in your Cloud SQL! 
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("SELECT station FROM stations WHERE id_code = %s OR LOWER(station) = %s", (user_input, user_input))
+        cursor.execute(
+            "SELECT station FROM stations WHERE id_code = %s OR station ILIKE %s OR station ILIKE %s", 
+            (user_input, f"%{user_input}%", f"{user_input} %")
+        )
         result = cursor.fetchone()
         conn.close()
         
@@ -388,22 +391,29 @@ def handle_complaint_logging(request_json):
         complaint_text = parameters.get('complaint_text', '')
         
         # 1. Initialize variables and retrieve from Dialogflow Contexts
+        # Ensure these are initialized as empty strings before the loop
         pnr = ""
         token = ""
         station = ""
         phone_number = ""
         travel_date = ""
-        
-        contexts = request_json['queryResult']['outputContexts']
+
+        contexts = request_json['queryResult'].get('outputContexts', []) 
         for c in contexts:
+            params = c.get('parameters', {})
+            
+            # Priority 1: Grab phone number wherever it appears in memory
+            if not phone_number:
+                phone_number = params.get('phone_number', '')
+            
+            # Priority 2: Grab specific complaint details
             if 'awaiting-complaint-description' in c.get('name', ''):
-                params = c.get('parameters', {})
-                pnr = params.get('pnr', '') 
-                token = params.get('complaint_token', '')
-                station = params.get('station_confirmed', '')
-                travel_date = params.get('travel_date', '')
-            if 'awaiting-location' in c.get('name', ''):
-                phone_number = c.get('parameters', {}).get('phone_number', '')
+                pnr = params.get('pnr', pnr) 
+                token = params.get('complaint_token', token)
+                station = params.get('station_confirmed', station)
+                # This catches the date once you change the Entity to @sys.date
+                if not travel_date:
+                    travel_date = params.get('travel_date', '')
 
         # 2. Identify Department (Categorization)
         dept = categorize_complaint(complaint_text)
