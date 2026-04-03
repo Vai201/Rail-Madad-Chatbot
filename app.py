@@ -313,12 +313,12 @@ def get_agency_name(pnr_str):
     try:
         # Extract numeric part of PNR (e.g., PNR0000001234 -> 1234)
         pnr_num = int(re.search(r'\d+', pnr_str).group())
-        if pnr_num <= 5000: return "Agency 1"
-        elif pnr_num <= 10000: return "Agency 2"
-        elif pnr_num <= 15000: return "Agency 3"
-        elif pnr_num <= 20000: return "Agency 4"
-        elif pnr_num <= 25000: return "Agency 5"
-        else: return "Agency 6"
+        if pnr_num <= 5000: agency = "M/s Ambuj Hotel Pvt. Ltd"
+        elif pnr_num <= 10000: agency = "M/s. R.K.Associates & Hoteliers Pvt.Ltd"
+        elif pnr_num <= 15000: agency = " M/s. Boon Catg. Co."
+        elif pnr_num <= 20000: agency = "M/s A.S Sales Corporation"
+        elif pnr_num <= 25000: agency = "M/s. Rathour Services"
+        else: agency = "M/s. A. A. Catg. Co"
     except:
         return "Internal Staff"
 
@@ -392,12 +392,12 @@ def handle_complaint_logging(request_json):
                 pnr_match = re.search(r'\d+', pnr)
                 if pnr_match:
                     pnr_num = int(pnr_match.group())
-                    if pnr_num <= 5000: agency = "Agency 1"
-                    elif pnr_num <= 10000: agency = "Agency 2"
-                    elif pnr_num <= 15000: agency = "Agency 3"
-                    elif pnr_num <= 20000: agency = "Agency 4"
-                    elif pnr_num <= 25000: agency = "Agency 5"
-                    else: agency = "Agency 6"
+                    if pnr_num <= 5000: agency = "M/s Ambuj Hotel Pvt. Ltd"
+                    elif pnr_num <= 10000: agency = "M/s. R.K.Associates & Hoteliers Pvt.Ltd"
+                    elif pnr_num <= 15000: agency = " M/s. Boon Catg. Co."
+                    elif pnr_num <= 20000: agency = "M/s A.S Sales Corporation"
+                    elif pnr_num <= 25000: agency = "M/s. Rathour Services"
+                    else: agency = "M/s. A. A. Catg. Co"
             except Exception as e:
                 print(f"Agency assignment error: {e}")
 
