@@ -482,7 +482,7 @@ def handle_complaint_logging(request_json):
         agency = "Internal Staff"
         if pnr:
             try:
-                pnr_match = re.search(r'\d+', pnr)
+                pnr_match = re.search(r'\d{10}', pnr) 
                 if pnr_match:
                     pnr_num = int(pnr_match.group())
                     if pnr_num <= 5000: agency = "M/s Ambuj Hotel Pvt. Ltd"
@@ -491,6 +491,9 @@ def handle_complaint_logging(request_json):
                     elif pnr_num <= 20000: agency = "M/s A.S Sales Corporation"
                     elif pnr_num <= 25000: agency = "M/s. Rathour Services"
                     else: agency = "M/s. A. A. Catg. Co"
+                else:
+                    # If it's not 10 digits, we can handle it or log it as invalid
+                    print(f"Invalid PNR length detected: {pnr}")
             except Exception as e:
                 print(f"Agency assignment error: {e}")
 
