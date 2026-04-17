@@ -6,9 +6,14 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import psycopg2
 import os
+import json
+import google.generativeai as genai
 from dotenv import load_dotenv # <-- Add this line near your other imports
 
 load_dotenv() # <-- Add this line right after your imports
+
+# Configure Gemini instantly
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 app = Flask(__name__)
 CORS(app)
@@ -315,26 +320,83 @@ def handle_pnr_verification(request_json):
         print(f"Error in PNR check: {e}")
         return {"fulfillmentText": "System error connecting to database. Please try again."}
 
-def categorize_complaint(complaint_text):
-    text = complaint_text.lower()
-    
+def syntax_router(text):
+    """The fast, 0ms keyword matcher for standard complaints."""
+    text = text.lower()
     mapping = {
-        "Security": ['theft', 'harassment', 'unauthorized', 'rpf', 'police', 'fight', 'stolen', 'security'],
         "Sanitation & Cleaning": ['dirty', 'toilet', 'washroom', 'cleaning', 'filthy', 'stink', 'garbage'],
         "Catering & Food": ['food', 'pantry', 'overcharged', 'meal', 'catering', 'bad food', 'water bottle'],
         "Maintenance & Electrical": ['ac', 'fan', 'light', 'charging', 'broken seat', 'window', 'electrical'],
         "Ticketing & Refunds": ['tte', 'ticket', 'refund', 'booking', 'seat allotment', 'collector'],
-        "Medical Assistance": ['doctor', 'medical', 'emergency', 'sick', 'injury', 'medicine', 'faint'],
         "Luggage & Parcels": ['luggage', 'parcel', 'lost bag', 'damaged bag', 'delayed luggage'],
         "Staff Behavior": ['rude', 'staff', 'unprofessional', 'behavior', 'shouting'],
         "Water Supply": ['no water', 'tap', 'dry', 'water supply']
     }
-
     for dept, keywords in mapping.items():
         if any(k in text for k in keywords):
             return dept
+    return None # Return None if it's confusing, forcing it to Gemini
+
+def neural_router(complaint_text):
+    """The smart LLM router for complex cases, emergencies, and safety tips."""
+    valid_departments = [
+        "Security", "Medical Assistance", "Sanitation & Cleaning", 
+        "Maintenance & Electrical", "General" 
+    ]
+    
+    prompt = f"""
+    You are an emergency routing AI for Indian Railways.
+    1. Categorize this complaint: "{complaint_text}"
+    2. Choose strictly from: {', '.join(valid_departments)}
+    3. If it is "Medical Assistance" or "Security", provide a 1-sentence piece of immediate, practical safety advice (e.g., "Drink a salt-sugar solution", "Move to a crowded coach"). If it is a normal complaint, leave advice empty.
+    
+    Respond ONLY in valid JSON format like this:
+    {{"department": "Chosen Department", "advice": "Your 1 sentence tip here or empty"}}
+    """
+    
+    try:
+        # Using the model with your highest quota!
+        model = genai.GenerativeModel('gemini-3.1-flash-lite')
+        # Force the model to output clean JSON
+        response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+        
+        data = json.loads(response.text)
+        dept = data.get("department", "General")
+        advice = data.get("advice", "")
+        
+        # Safety check to prevent hallucinations
+        if dept not in valid_departments:
+            dept = "General"
             
-    return "General" # Fallback instead of Train Delays
+        return dept, advice
+        
+    except Exception as e:
+        print(f"Gemini Error/Quota Reached: {e}")
+        return None, ""
+
+def categorize_complaint(complaint_text):
+    """Routes the complaint based on speed, cost, and emergency status."""
+    
+    # RULE 1: Is it an obvious emergency? Force it to the Neural AI for tips!
+    emergency_keywords = ['police', 'stolen', 'harassment', 'doctor', 'faint', 'sick', 'blood', 'emergency', 'fight', 'creepy']
+    is_emergency = any(word in complaint_text.lower() for word in emergency_keywords)
+    
+    if is_emergency:
+        dept, advice = neural_router(complaint_text)
+        if dept: return dept, advice
+    
+    # RULE 2: Not an emergency? Try the 0ms Syntax Router first.
+    syntax_dept = syntax_router(complaint_text)
+    if syntax_dept:
+        return syntax_dept, "" # Fast categorization, no advice needed
+        
+    # RULE 3: Syntax failed (vague/weird text)? Fallback to Neural AI.
+    dept, advice = neural_router(complaint_text)
+    if dept:
+        return dept, advice
+        
+    # RULE 4: If EVERYTHING fails (Gemini API quota is 0 AND syntax failed), return General
+    return "General", ""
 
 def get_agency_name(pnr_str):
     try:
@@ -414,7 +476,7 @@ def handle_complaint_logging(request_json):
                     travel_date = params.get('travel_date', '')
 
         # 2. Identify Department (Categorization)
-        dept = categorize_complaint(complaint_text)
+        dept, advice_tip = categorize_complaint(complaint_text)
         
         # 3. Agency Assignment Logic
         agency = "Internal Staff"
@@ -477,7 +539,12 @@ def handle_complaint_logging(request_json):
                     "text": [emergency_alert]
                 }
             })
-            
+        # If Gemini generated an emergency tip, display it as an extra chat bubble!
+        if advice_tip:
+            emergency_alert = f"🚨 IMMEDIATE ADVICE: {advice_tip} Help is on the way."
+            reply_payload["fulfillmentMessages"].append({
+                "text": {"text": [emergency_alert]}
+            })    
         return reply_payload
 
     except Exception as e:
