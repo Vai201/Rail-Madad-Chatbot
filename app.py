@@ -266,7 +266,7 @@ def handle_pnr_verification(request_json):
     # 1. Get the PNR from Dialogflow parameters
     pnr_input = request_json['queryResult']['parameters'].get('pnr_number', '')
     
-    # FIX: Safely handle Dialogflow's float conversion (e.g., turning 51.0 or "51.0" into "51")
+    # Safely handle Dialogflow's float conversion (e.g., turning 51.0 or "51.0" into "51")
     pnr_input_str = str(pnr_input)
     if "." in pnr_input_str:
         pnr_input_str = pnr_input_str.split(".")[0]
@@ -274,9 +274,12 @@ def handle_pnr_verification(request_json):
     # 2. Extract just the digits
     pnr_digits = "".join(re.findall(r'\d', pnr_input_str))
     
-    # FIX: Pad with leading zeros to make it 10 digits, and add "PNR" prefix
-    # If they typed "51", it becomes "0000000051" -> "PNR0000000051"
-    db_pnr_format = f"PNR{pnr_digits.zfill(10)}"
+    # 🚨 NEW STRICT CHECK: If it is not exactly 10 digits, reject it instantly!
+    if len(pnr_digits) != 10:
+        return {"fulfillmentText": f"Invalid PNR length. You entered {len(pnr_digits)} digits. Please provide a valid 10-digit PNR number."}
+    
+    # Format the PNR to match your database format (e.g., "PNR0000003333")
+    db_pnr_format = f"PNR{pnr_digits}"
     
     try:
         # 3. Connect to SQL and search using the exact database format
@@ -289,13 +292,13 @@ def handle_pnr_verification(request_json):
         if result:
             train_no, travel_date = result
             
-            # FIX 1: Create a token by shuffling the user's actual PNR digits
+            # Create a token by shuffling the user's actual PNR digits
             pnr_list = list(pnr_digits)
             random.shuffle(pnr_list)
             shuffled_pnr = "".join(pnr_list)
             token = f"TK-{shuffled_pnr[:6]}" # Uses the first 6 shuffled digits
             
-            # FIX 2: Hide the token from the user, just ask for the complaint
+            # Hide the token from the user, just ask for the complaint
             response_text = f"PNR verified for Train {train_no} on {travel_date}. Please describe your complaint."
             
             return {
@@ -313,7 +316,7 @@ def handle_pnr_verification(request_json):
                 ]
             }
         else:
-            # Notice the new error message text!
+            # Tell the user the exact PNR wasn't found
             return {"fulfillmentText": f"{db_pnr_format} not found in the database. Please check your ticket and try again."}
             
     except Exception as e:
