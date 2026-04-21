@@ -368,7 +368,7 @@ def neural_router(complaint_text):
     
     try:
         # THE FIX: Switched back to 3.1-flash-lite-preview for the 500 RPD quota!
-        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+        model = genai.GenerativeModel('models/gemma-4-31b-it')
         
         safety_settings = [
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
