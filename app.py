@@ -359,7 +359,7 @@ def neural_router(complaint_text):
     
     try:
         # Using the ultra-fast 2.0 Flash Lite production model
-        model = genai.GenerativeModel('models/gemini-2.0-flash-lite')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         
         # We cap the tokens at 60 so the AI responds in milliseconds instead of seconds
         response = model.generate_content(
