@@ -350,20 +350,25 @@ def neural_router(complaint_text):
         "Maintenance & Electrical", "General" 
     ]
     
-    # THE FIX: A machine-to-machine prompt that strictly bans polite filler
+    # ADDED: Anti-overfitting instructions to force dynamic, unique advice
     prompt = f"""You are a backend routing API for Indian Railways. You receive a complaint and output ONLY raw JSON. 
     Complaint: "{complaint_text}"
     Valid Departments: {', '.join(valid_departments)}
-    Rule: If department is "Medical Assistance" or "Security", write a 1-sentence safety advice. Otherwise, advice is "".
     
-    CRITICAL: Do NOT say "Here is the JSON". Do NOT use markdown. Do NOT be polite. Start your response exactly with the {{ character and end with }}.
+    Rules for 'advice' field:
+    1. If "Medical Assistance": Provide 1 sentence of highly actionable, practical first-aid steps the bystander can do right now to help.
+    2. If "Security": Provide 1 sentence of tactical safety advice.
+    3. If any other department: The advice field MUST be "".
     
-    Example output:
-    {{"department": "Medical Assistance", "advice": "Please stay calm and wait for the doctor."}}
+    CRITICAL: Generate unique advice based on the passenger's exact situation. Do NOT copy the example text below. Do NOT say "Here is the JSON". Start exactly with {{ and end with }}.
+    
+    Example format:
+    {{"department": "Medical Assistance", "advice": "Loosen their collar, elevate their legs, and clear the area."}}
     """
     
     try:
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        # THE FIX: Switched back to 3.1-flash-lite-preview for the 500 RPD quota!
+        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
         
         safety_settings = [
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
@@ -377,7 +382,7 @@ def neural_router(complaint_text):
             safety_settings=safety_settings,
             generation_config={
                 "response_mime_type": "application/json",
-                "max_output_tokens": 300  # Increased to prevent any cut-offs
+                "max_output_tokens": 300 
             }
         )
         
@@ -387,7 +392,6 @@ def neural_router(complaint_text):
         raw_response = response.text.strip()
         print(f"DEBUG GEMINI RAW: {raw_response}") 
         
-        # Regex failsafe
         match = re.search(r'\{.*\}', raw_response, re.DOTALL)
         
         if match:
@@ -401,7 +405,6 @@ def neural_router(complaint_text):
                 
             return dept, advice
         else:
-            print("CRITICAL: No JSON brackets found in Gemini response.")
             return "General", ""
             
     except Exception as e:
