@@ -359,7 +359,7 @@ def neural_router(complaint_text):
     
     try:
         # Using the model with your highest quota!
-        model = genai.GenerativeModel('gemini-3.1-flash-lite')
+        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
         # Force the model to output clean JSON
         response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
         
