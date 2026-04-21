@@ -351,6 +351,7 @@ def neural_router(complaint_text):
     ]
     
     # ADDED: Anti-overfitting instructions to force dynamic, unique advice
+    # THE FIX: Added Rule #4 to make the AI aware of the PNR data
     prompt = f"""You are a backend routing API for Indian Railways. You receive a complaint and output ONLY raw JSON. 
     Complaint: "{complaint_text}"
     Valid Departments: {', '.join(valid_departments)}
@@ -359,11 +360,12 @@ def neural_router(complaint_text):
     1. If "Medical Assistance": Provide 1 sentence of highly actionable, practical first-aid steps the bystander can do right now to help.
     2. If "Security": Provide 1 sentence of tactical safety advice.
     3. If any other department: The advice field MUST be "".
+    4. CRITICAL SYSTEM AWARENESS: The system already knows the passenger's exact Train, Coach, and Seat number via their PNR. Do NOT advise the passenger to provide their seat or coach number to anyone. Focus purely on immediate physical safety and tactical positioning.
     
     CRITICAL: Generate unique advice based on the passenger's exact situation. Do NOT copy the example text below. Do NOT say "Here is the JSON". Start exactly with {{ and end with }}.
     
     Example format:
-    {{"department": "Medical Assistance", "advice": "Loosen their collar, elevate their legs, and clear the area."}}
+    {{"department": "Security", "advice": "Do not confront the individual; quietly secure your belongings and move to a more populated area of the coach while RPF arrives."}}
     """
     
     try:
