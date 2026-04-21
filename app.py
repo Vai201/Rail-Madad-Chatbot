@@ -343,21 +343,23 @@ def syntax_router(text):
 def neural_router(complaint_text):
     """Fully dynamic LLM router for complex cases, emergencies, and safety tips."""
     import json
-    import re  # Added Regex for bulletproof JSON extraction
+    import re
     
     valid_departments = [
         "Security", "Medical Assistance", "Sanitation & Cleaning", 
         "Maintenance & Electrical", "General" 
     ]
     
-    prompt = f"""
-    You are an emergency routing AI for Indian Railways.
-    1. Categorize this complaint dynamically: "{complaint_text}"
-    2. Choose strictly from: {', '.join(valid_departments)}
-    3. If it is "Medical Assistance" or "Security", provide a 1-sentence piece of immediate safety advice. Otherwise, leave advice empty.
+    # THE FIX: A machine-to-machine prompt that strictly bans polite filler
+    prompt = f"""You are a backend routing API for Indian Railways. You receive a complaint and output ONLY raw JSON. 
+    Complaint: "{complaint_text}"
+    Valid Departments: {', '.join(valid_departments)}
+    Rule: If department is "Medical Assistance" or "Security", write a 1-sentence safety advice. Otherwise, advice is "".
     
-    Output ONLY a raw JSON object. NO conversational text. NO markdown.
-    {{"department": "Chosen Department", "advice": "Your 1 sentence tip here or empty"}}
+    CRITICAL: Do NOT say "Here is the JSON". Do NOT use markdown. Do NOT be polite. Start your response exactly with the {{ character and end with }}.
+    
+    Example output:
+    {{"department": "Medical Assistance", "advice": "Please stay calm and wait for the doctor."}}
     """
     
     try:
@@ -375,7 +377,7 @@ def neural_router(complaint_text):
             safety_settings=safety_settings,
             generation_config={
                 "response_mime_type": "application/json",
-                "max_output_tokens": 150 
+                "max_output_tokens": 300  # Increased to prevent any cut-offs
             }
         )
         
@@ -385,7 +387,7 @@ def neural_router(complaint_text):
         raw_response = response.text.strip()
         print(f"DEBUG GEMINI RAW: {raw_response}") 
         
-        # THE FIX: Hunt down the exact JSON block and ignore polite text
+        # Regex failsafe
         match = re.search(r'\{.*\}', raw_response, re.DOTALL)
         
         if match:
