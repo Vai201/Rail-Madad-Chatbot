@@ -367,8 +367,8 @@ def neural_router(complaint_text):
     """
     
     try:
-        # THE FIX: Switched back to 3.1-flash-lite-preview for the 500 RPD quota!
-        model = genai.GenerativeModel('models/gemma-4-31b-it')
+        # THE FIX: Gemma 3 27B (14,400 RPD Quota)
+        model = genai.GenerativeModel('models/gemma-3-27b-it')
         
         safety_settings = [
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
@@ -377,11 +377,11 @@ def neural_router(complaint_text):
             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"}
         ]
         
+        # THE FIX: Removed the JSON mime-type so Gemma stops throwing 500 errors
         response = model.generate_content(
             prompt, 
             safety_settings=safety_settings,
             generation_config={
-                "response_mime_type": "application/json",
                 "max_output_tokens": 300 
             }
         )
@@ -392,6 +392,7 @@ def neural_router(complaint_text):
         raw_response = response.text.strip()
         print(f"DEBUG GEMINI RAW: {raw_response}") 
         
+        # Our Regex hunter will perfectly extract the JSON from the raw text
         match = re.search(r'\{.*\}', raw_response, re.DOTALL)
         
         if match:
@@ -405,7 +406,12 @@ def neural_router(complaint_text):
                 
             return dept, advice
         else:
+            print("CRITICAL: No JSON brackets found in Gemini response.")
             return "General", ""
+            
+    except Exception as e:
+        print(f"CRITICAL GEMINI ERROR: {e}")
+        return "General", ""
             
     except Exception as e:
         print(f"CRITICAL GEMINI ERROR: {e}")
