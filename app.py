@@ -342,13 +342,14 @@ def syntax_router(text):
 
 def neural_router(complaint_text):
     """Fully dynamic LLM router for complex cases, emergencies, and safety tips."""
+    import json
     valid_departments = [
         "Security", "Medical Assistance", "Sanitation & Cleaning", 
         "Maintenance & Electrical", "General" 
     ]
     
     prompt = f"""
-    You are a fast emergency routing AI for Indian Railways.
+    You are an emergency routing AI for Indian Railways.
     1. Categorize this complaint dynamically: "{complaint_text}"
     2. Choose strictly from: {', '.join(valid_departments)}
     3. If it is "Medical Assistance" or "Security", provide a 1-sentence piece of immediate safety advice. Otherwise, leave advice empty.
@@ -358,20 +359,33 @@ def neural_router(complaint_text):
     """
     
     try:
-        # Using the ultra-fast 2.0 Flash Lite production model
         model = genai.GenerativeModel('gemini-2.5-flash')
         
-        # We cap the tokens at 60 so the AI responds in milliseconds instead of seconds
+        # THE FIX: Tell Gemini to stop censoring medical/security emergencies
+        safety_settings = [
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"}
+        ]
+        
         response = model.generate_content(
             prompt, 
+            safety_settings=safety_settings,
             generation_config={
                 "response_mime_type": "application/json",
                 "max_output_tokens": 150 
             }
         )
         
-        # Strip markdown backticks if present
+        # Failsafe: If the AI still returns a blank string for any reason
+        if not response.text:
+            print("CRITICAL: Gemini returned an empty response.")
+            return "General", ""
+
         raw_response = response.text.strip()
+        print(f"DEBUG GEMINI RAW: {raw_response}") 
+        
         if raw_response.startswith('```json'):
             raw_response = raw_response.replace('```json', '').replace('```', '').strip()
         elif raw_response.startswith('```'):
@@ -387,7 +401,7 @@ def neural_router(complaint_text):
         return dept, advice
         
     except Exception as e:
-        print(f"Gemini Error: {e}")
+        print(f"CRITICAL GEMINI ERROR: {e}")
         return "General", ""
 
 def categorize_complaint(complaint_text):
