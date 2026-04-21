@@ -343,6 +343,8 @@ def syntax_router(text):
 def neural_router(complaint_text):
     """Fully dynamic LLM router for complex cases, emergencies, and safety tips."""
     import json
+    import re  # Added Regex for bulletproof JSON extraction
+    
     valid_departments = [
         "Security", "Medical Assistance", "Sanitation & Cleaning", 
         "Maintenance & Electrical", "General" 
@@ -354,14 +356,13 @@ def neural_router(complaint_text):
     2. Choose strictly from: {', '.join(valid_departments)}
     3. If it is "Medical Assistance" or "Security", provide a 1-sentence piece of immediate safety advice. Otherwise, leave advice empty.
     
-    Respond ONLY in valid JSON format like this:
+    Output ONLY a raw JSON object. NO conversational text. NO markdown.
     {{"department": "Chosen Department", "advice": "Your 1 sentence tip here or empty"}}
     """
     
     try:
         model = genai.GenerativeModel('gemini-2.5-flash')
         
-        # THE FIX: Tell Gemini to stop censoring medical/security emergencies
         safety_settings = [
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -378,28 +379,29 @@ def neural_router(complaint_text):
             }
         )
         
-        # Failsafe: If the AI still returns a blank string for any reason
         if not response.text:
-            print("CRITICAL: Gemini returned an empty response.")
             return "General", ""
 
         raw_response = response.text.strip()
         print(f"DEBUG GEMINI RAW: {raw_response}") 
         
-        if raw_response.startswith('```json'):
-            raw_response = raw_response.replace('```json', '').replace('```', '').strip()
-        elif raw_response.startswith('```'):
-            raw_response = raw_response.replace('```', '').strip()
-            
-        data = json.loads(raw_response)
-        dept = data.get("department", "General")
-        advice = data.get("advice", "")
+        # THE FIX: Hunt down the exact JSON block and ignore polite text
+        match = re.search(r'\{.*\}', raw_response, re.DOTALL)
         
-        if dept not in valid_departments:
-            dept = "General"
+        if match:
+            clean_json_string = match.group(0)
+            data = json.loads(clean_json_string)
+            dept = data.get("department", "General")
+            advice = data.get("advice", "")
             
-        return dept, advice
-        
+            if dept not in valid_departments:
+                dept = "General"
+                
+            return dept, advice
+        else:
+            print("CRITICAL: No JSON brackets found in Gemini response.")
+            return "General", ""
+            
     except Exception as e:
         print(f"CRITICAL GEMINI ERROR: {e}")
         return "General", ""
