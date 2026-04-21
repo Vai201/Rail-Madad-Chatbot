@@ -341,41 +341,65 @@ def syntax_router(text):
     return None # Return None if it's confusing, forcing it to Gemini
 
 def neural_router(complaint_text):
-    """The smart LLM router for complex cases, emergencies, and safety tips."""
+    """Fully dynamic LLM router for complex cases, emergencies, and safety tips."""
     valid_departments = [
         "Security", "Medical Assistance", "Sanitation & Cleaning", 
         "Maintenance & Electrical", "General" 
     ]
     
     prompt = f"""
-    You are an emergency routing AI for Indian Railways.
-    1. Categorize this complaint: "{complaint_text}"
+    You are a fast emergency routing AI for Indian Railways.
+    1. Categorize this complaint dynamically: "{complaint_text}"
     2. Choose strictly from: {', '.join(valid_departments)}
-    3. If it is "Medical Assistance" or "Security", provide a 1-sentence piece of immediate, practical safety advice (e.g., "Drink a salt-sugar solution", "Move to a crowded coach"). If it is a normal complaint, leave advice empty.
+    3. If it is "Medical Assistance" or "Security", provide a 1-sentence piece of immediate safety advice. Otherwise, leave advice empty.
     
     Respond ONLY in valid JSON format like this:
     {{"department": "Chosen Department", "advice": "Your 1 sentence tip here or empty"}}
     """
     
     try:
-        # Using the model with your highest quota!
-        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
-        # Force the model to output clean JSON
-        response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
+        # Using the ultra-fast 2.0 Flash Lite production model
+        model = genai.GenerativeModel('models/gemini-2.0-flash-lite')
         
-        data = json.loads(response.text)
+        # We cap the tokens at 60 so the AI responds in milliseconds instead of seconds
+        response = model.generate_content(
+            prompt, 
+            generation_config={
+                "response_mime_type": "application/json",
+                "max_output_tokens": 60 
+            }
+        )
+        
+        # Strip markdown backticks if present
+        raw_response = response.text.strip()
+        if raw_response.startswith('```json'):
+            raw_response = raw_response.replace('```json', '').replace('```', '').strip()
+        elif raw_response.startswith('```'):
+            raw_response = raw_response.replace('```', '').strip()
+            
+        data = json.loads(raw_response)
         dept = data.get("department", "General")
         advice = data.get("advice", "")
         
-        # Safety check to prevent hallucinations
         if dept not in valid_departments:
             dept = "General"
             
         return dept, advice
         
     except Exception as e:
-        print(f"Gemini Error/Quota Reached: {e}")
-        return None, ""
+        print(f"Gemini Error: {e}")
+        return "General", ""
+
+def categorize_complaint(complaint_text):
+    """Dynamic routing that uses Syntax for speed, and AI for complexity."""
+    
+    # 1. Try Syntax Router first for simple, obvious things (e.g., "fan not working")
+    syntax_dept = syntax_router(complaint_text)
+    if syntax_dept:
+        return syntax_dept, "" 
+        
+    # 2. If it's weird, complex, or an emergency, let the AI dynamically think!
+    return neural_router(complaint_text)
 
 def categorize_complaint(complaint_text):
     """Routes the complaint based on speed, cost, and emergency status."""
