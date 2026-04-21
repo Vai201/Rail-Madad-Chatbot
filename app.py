@@ -528,23 +528,29 @@ def handle_complaint_logging(request_json):
         dept, advice_tip = categorize_complaint(complaint_text)
         
         # 3. Agency Assignment Logic
-        agency = "Internal Staff"
-        if pnr:
-            try:
-                pnr_match = re.search(r'\d{10}', pnr) 
-                if pnr_match:
-                    pnr_num = int(pnr_match.group())
-                    if pnr_num <= 5000: agency = "M/s Ambuj Hotel Pvt. Ltd"
-                    elif pnr_num <= 10000: agency = "M/s. R.K.Associates & Hoteliers Pvt.Ltd"
-                    elif pnr_num <= 15000: agency = " M/s. Boon Catg. Co."
-                    elif pnr_num <= 20000: agency = "M/s A.S Sales Corporation"
-                    elif pnr_num <= 25000: agency = "M/s. Rathour Services"
-                    else: agency = "M/s. A. A. Catg. Co"
-                else:
-                    # If it's not 10 digits, we can handle it or log it as invalid
-                    print(f"Invalid PNR length detected: {pnr}")
-            except Exception as e:
-                print(f"Agency assignment error: {e}")
+        # OVERRIDE: Emergencies go to official forces, not private contractors
+        if dept == "Medical Assistance":
+            agency = "Indian Railway Medical Service (IRMS)"
+        elif dept == "Security":
+            agency = "The Railway Protection Force (RPF)"
+        else:
+            # For standard complaints, assign private contractors based on PNR
+            agency = "Internal Staff"
+            if pnr:
+                try:
+                    pnr_match = re.search(r'\d{10}', pnr) 
+                    if pnr_match:
+                        pnr_num = int(pnr_match.group())
+                        if pnr_num <= 5000: agency = "M/s Ambuj Hotel Pvt. Ltd"
+                        elif pnr_num <= 10000: agency = "M/s. R.K.Associates & Hoteliers Pvt.Ltd"
+                        elif pnr_num <= 15000: agency = " M/s. Boon Catg. Co."
+                        elif pnr_num <= 20000: agency = "M/s A.S Sales Corporation"
+                        elif pnr_num <= 25000: agency = "M/s. Rathour Services"
+                        else: agency = "M/s. A. A. Catg. Co"
+                    else:
+                        print(f"Invalid PNR length detected: {pnr}")
+                except Exception as e:
+                    print(f"Agency assignment error: {e}")
 
         # 4. PRIVACY LOGIC: Full Data vs. Redacted
         if dept in ["Security", "Medical Assistance"]:
