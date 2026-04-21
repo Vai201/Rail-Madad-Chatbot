@@ -366,7 +366,7 @@ def neural_router(complaint_text):
             prompt, 
             generation_config={
                 "response_mime_type": "application/json",
-                "max_output_tokens": 60 
+                "max_output_tokens": 150 
             }
         )
         
