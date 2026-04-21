@@ -324,21 +324,53 @@ def handle_pnr_verification(request_json):
         return {"fulfillmentText": "System error connecting to database. Please try again."}
 
 def syntax_router(text):
-    """The fast, 0ms keyword matcher for standard complaints."""
+    """The fast, 0ms keyword matcher using strict whole-word boundaries."""
+    import re
     text = text.lower()
+    
+    # Using \b (Word Boundary) ensures we match the exact word, not substrings.
+    # Example: \bac\b matches "the ac is broken" but ignores "stomach".
     mapping = {
-        "Sanitation & Cleaning": ['dirty', 'toilet', 'washroom', 'cleaning', 'filthy', 'stink', 'garbage'],
-        "Catering & Food": ['food', 'pantry', 'overcharged', 'meal', 'catering', 'bad food', 'water bottle'],
-        "Maintenance & Electrical": ['ac', 'fan', 'light', 'charging', 'broken seat', 'window', 'electrical'],
-        "Ticketing & Refunds": ['tte', 'ticket', 'refund', 'booking', 'seat allotment', 'collector'],
-        "Luggage & Parcels": ['luggage', 'parcel', 'lost bag', 'damaged bag', 'delayed luggage'],
-        "Staff Behavior": ['rude', 'staff', 'unprofessional', 'behavior', 'shouting'],
-        "Water Supply": ['no water', 'tap', 'dry', 'water supply']
+        "Sanitation & Cleaning": [r'\bdirty\b', r'\btoilet\b', r'\bwashroom\b', r'\bcleaning\b', r'\bfilthy\b', r'\bstink\b', r'\bgarbage\b'],
+        "Catering & Food": [r'\bfood\b', r'\bpantry\b', r'\bovercharged\b', r'\bmeal\b', r'\bcatering\b', r'\bbad food\b', r'\bwater bottle\b'],
+        "Maintenance & Electrical": [r'\bac\b', r'\bfan\b', r'\blight\b', r'\bcharging\b', r'\bbroken seat\b', r'\bwindow\b', r'\belectrical\b'],
+        "Ticketing & Refunds": [r'\btte\b', r'\bticket\b', r'\brefund\b', r'\bbooking\b', r'\bseat allotment\b', r'\bcollector\b'],
+        "Luggage & Parcels": [r'\bluggage\b', r'\bparcel\b', r'\blost bag\b', r'\bdamaged bag\b', r'\bdelayed luggage\b'],
+        "Staff Behavior": [r'\brude\b', r'\bstaff\b', r'\bunprofessional\b', r'\bbehavior\b', r'\bshouting\b'],
+        "Water Supply": [r'\bno water\b', r'\btap\b', r'\bdry\b', r'\bwater supply\b']
     }
-    for dept, keywords in mapping.items():
-        if any(k in text for k in keywords):
-            return dept
-    return None # Return None if it's confusing, forcing it to Gemini
+    
+    for dept, patterns in mapping.items():
+        for pattern in patterns:
+            if re.search(pattern, text):
+                return dept
+    return None 
+
+def categorize_complaint(complaint_text):
+    """Hybrid Enterprise Routing: Emergency Check -> Syntax -> Neural AI Fallback."""
+    
+    # RULE 1: The Emergency Intercept
+    # If the text contains severe words, skip syntax and force it to the AI for tactical advice
+    emergency_keywords = ['police', 'stolen', 'harass', 'doctor', 'faint', 'sick', 'blood', 'emergency', 'fight', 'creepy', 'pain', 'pregnant', 'attack']
+    is_emergency = any(word in complaint_text.lower() for word in emergency_keywords)
+    
+    if is_emergency:
+        dept, advice = neural_router(complaint_text)
+        if dept: return dept, advice
+    
+    # RULE 2: The Fast Track (0ms)
+    # Not an emergency? Let the strict regex syntax router handle it to save AI quota
+    syntax_dept = syntax_router(complaint_text)
+    if syntax_dept:
+        return syntax_dept, "" 
+        
+    # RULE 3: The Smart Fallback
+    # If it's a weird, misspelled, or complex sentence the regex missed, let Gemma figure it out
+    dept, advice = neural_router(complaint_text)
+    if dept:
+        return dept, advice
+        
+    return "General", ""
 
 def neural_router(complaint_text):
     """Fully dynamic LLM router for complex cases, emergencies, and safety tips."""
@@ -414,45 +446,6 @@ def neural_router(complaint_text):
     except Exception as e:
         print(f"CRITICAL GEMINI ERROR: {e}")
         return "General", ""
-            
-    except Exception as e:
-        print(f"CRITICAL GEMINI ERROR: {e}")
-        return "General", ""
-
-def categorize_complaint(complaint_text):
-    """Dynamic routing that uses Syntax for speed, and AI for complexity."""
-    
-    # 1. Try Syntax Router first for simple, obvious things (e.g., "fan not working")
-    syntax_dept = syntax_router(complaint_text)
-    if syntax_dept:
-        return syntax_dept, "" 
-        
-    # 2. If it's weird, complex, or an emergency, let the AI dynamically think!
-    return neural_router(complaint_text)
-
-def categorize_complaint(complaint_text):
-    """Routes the complaint based on speed, cost, and emergency status."""
-    
-    # RULE 1: Is it an obvious emergency? Force it to the Neural AI for tips!
-    emergency_keywords = ['police', 'stolen', 'harassment', 'doctor', 'faint', 'sick', 'blood', 'emergency', 'fight', 'creepy']
-    is_emergency = any(word in complaint_text.lower() for word in emergency_keywords)
-    
-    if is_emergency:
-        dept, advice = neural_router(complaint_text)
-        if dept: return dept, advice
-    
-    # RULE 2: Not an emergency? Try the 0ms Syntax Router first.
-    syntax_dept = syntax_router(complaint_text)
-    if syntax_dept:
-        return syntax_dept, "" # Fast categorization, no advice needed
-        
-    # RULE 3: Syntax failed (vague/weird text)? Fallback to Neural AI.
-    dept, advice = neural_router(complaint_text)
-    if dept:
-        return dept, advice
-        
-    # RULE 4: If EVERYTHING fails (Gemini API quota is 0 AND syntax failed), return General
-    return "General", ""
 
 def get_agency_name(pnr_str):
     try:
