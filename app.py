@@ -24,8 +24,8 @@ CORS(app)
 # Initialize the translation client globally
 translate_client = translate.Client()
 
-# 👇 ADD YOUR GOOGLE CLOUD PROJECT ID HERE 👇
-DIALOGFLOW_PROJECT_ID = "project-f988ee73-0741-4016-82c"
+# 👇 UPDATE THIS TO THE CORRECT BOT PROJECT ID 👇
+DIALOGFLOW_PROJECT_ID = "automation-of-rail-madad"
 # --- UTILITY FUNCTIONS ---
 
 def process_translation(text, target_language):
