@@ -9,17 +9,36 @@ import os
 import json
 import google.generativeai as genai
 from dotenv import load_dotenv # <-- Add this line near your other imports
+from google.cloud import translate_v2 as translate
+from google.cloud import dialogflow_v2 as dialogflow
 
-load_dotenv() # <-- Add this line right after your imports
+load_dotenv() 
 
 # Configure Gemini instantly
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
+# Initialize App and CORS
 app = Flask(__name__)
 CORS(app)
-@app.route('/')
-def home():
-    return "Rail Madad Chatbot Backend is Live!"
+
+# Initialize the translation client globally
+translate_client = translate.Client()
+
+# 👇 ADD YOUR GOOGLE CLOUD PROJECT ID HERE 👇
+DIALOGFLOW_PROJECT_ID = "project-f988ee73-0741-4016-82c"
+# --- UTILITY FUNCTIONS ---
+
+def process_translation(text, target_language):
+    if target_language == 'en':
+        return text
+    try:
+        result = translate_client.translate(text, target_language=target_language)
+        return result['translatedText']
+    except Exception as e:
+        print(f"Translation Error: {e}")
+        return text
+
+
 
 # --- 1. Define Paths & Cloud DB Credentials ---
 # --- 1. Define Paths & Cloud DB Credentials ---
@@ -679,6 +698,42 @@ def webhook():
     # Fallback if intent is not recognized or doesn't need backend processing
     return jsonify({"fulfillmentText": "Webhook received the intent, but no backend action was required."})
 
+@app.route('/chat_proxy', methods=['POST'])
+def chat_proxy():
+    """Acts as the middleman between the Custom UI and Dialogflow."""
+    data = request.get_json()
+    
+    user_message = data.get('message')
+    selected_language = data.get('language', 'en')
+    session_id = data.get('session_id', 'default-session')
+    
+    try:
+        # Step 1: Translate user input INTO English
+        english_input = process_translation(user_message, 'en')
+        
+        # Step 2: Send the English text to Dialogflow
+        session_client = dialogflow.SessionsClient()
+        session = session_client.session_path(DIALOGFLOW_PROJECT_ID, session_id)
+        
+        text_input = dialogflow.TextInput(text=english_input, language_code="en")
+        query_input = dialogflow.QueryInput(text=text_input)
+        
+        # This calls your Dialogflow agent, which might in turn trigger your /webhook!
+        response = session_client.detect_intent(
+            request={"session": session, "query_input": query_input}
+        )
+        
+        bot_response_english = response.query_result.fulfillment_text
+        
+        # Step 3: Translate the bot's response OUT to the user's language
+        final_response = process_translation(bot_response_english, selected_language)
+        
+        return jsonify({"reply": final_response})
+
+    except Exception as e:
+        print(f"Dialogflow Proxy Error: {e}")
+        error_msg = process_translation("I am experiencing a network issue connecting to the main server. Please try again.", selected_language)
+        return jsonify({"reply": error_msg}), 500
 
 @app.route('/api/track', methods=['POST'])
 def track_by_phone():

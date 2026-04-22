@@ -24,9 +24,9 @@
             <p class="text-lg text-gray-600 mt-2">Complaint System Prototype</p>
             
             <p class="mt-6 text-gray-700">
-                Welcome to the demonstration page. Please use the floating chat bubble in the
+                Welcome to the demonstration page. Please use the custom chat window in the
                 <strong class="text-indigo-600">bottom-right corner</strong> 
-                to interact with the AI assistant.
+                to interact with the AI assistant in multiple languages.
             </p>
             
             <div class="mt-8 pt-6 border-t border-gray-200">
@@ -71,7 +71,45 @@
 
     </div>
 
+    <div class="fixed bottom-6 right-6 w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col h-[550px] z-50">
+        
+        <div class="bg-indigo-600 p-4 text-white flex justify-between items-center shadow-md z-10">
+            <h3 class="font-bold flex items-center gap-2">
+                <span class="text-xl">🤖</span> Rail Madad AI
+            </h3>
+            <select id="language-selector" class="text-gray-900 text-xs rounded p-1 font-medium focus:outline-none focus:ring-2 focus:ring-white">
+                <option value="en">English</option>
+                <option value="hi">Hindi (हिंदी)</option>
+                <option value="mr">Marathi (मराठी)</option>
+                <option value="gu">Gujarati (ગુજરાતી)</option>
+                <option value="bn">Bengali (বাংলা)</option>
+                <option value="ta">Tamil (தமிழ்)</option>
+                <option value="te">Telugu (తెలుగు)</option>
+                <option value="kn">Kannada (ಕನ್ನಡ)</option>
+                <option value="ml">Malayalam (മലയാളം)</option>
+                <option value="pa">Punjabi (ਪੰਜਾਬੀ)</option>
+            </select>
+        </div>
+
+        <div id="chat-history" class="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50 flex flex-col">
+            <div class="bg-white p-3 rounded-tr-xl rounded-b-xl shadow-sm max-w-[80%] text-sm text-gray-800 self-start border border-gray-100">
+                Welcome to Rail Madad! Please select your preferred language above, then describe your complaint or query.
+            </div>
+        </div>
+
+        <div class="p-3 bg-white border-t border-gray-200 flex gap-2">
+            <input type="text" id="user-input" 
+                   class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
+                   placeholder="Type your message..."
+                   onkeypress="if(event.key === 'Enter') sendMessage()">
+            <button onclick="sendMessage()" 
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm">
+                Send
+            </button>
+        </div>
+    </div>
     <script>
+    // --- TRACKING LOGIC ---
     async function trackComplaint() {
         const phoneNumber = document.getElementById('trackPhoneInput').value.trim();
         const resultsDiv = document.getElementById('trackingResults');
@@ -85,19 +123,15 @@
         resultsDiv.innerHTML = `<div class="p-4 text-indigo-600 animate-pulse text-center font-medium">Connecting to secure database...</div>`;
 
         try {
-            // Your permanent Google Cloud Run URL!
             const BACKEND_URL = 'https://rail-madad-chatbot-1094417494880.asia-south1.run.app'; 
             
             const response = await fetch(`${BACKEND_URL}/api/track`, {
                 method: 'POST',
-                // Look! We get to remove the Localtunnel Bypass hack!
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phone_number: phoneNumber })
             });
 
             const data = await response.json();
-            
-            // ... the rest of the code (if data.complaints...) remains exactly the same ...
 
             if (data.complaints && data.complaints.length > 0) {
                 let htmlOutput = `<h3 class="font-bold text-gray-800 mb-3 border-b pb-2">Found ${data.complaints.length} Record(s):</h3><div class="space-y-4">`;
@@ -137,18 +171,73 @@
 
         } catch (error) {
             console.error("Error connecting to backend:", error);
-            resultsDiv.innerHTML = `<div class="p-4 bg-red-50 text-red-600 rounded-lg border border-red-200"><strong>Connection Error:</strong> Could not reach the server. Ensure your Python backend is running and the Localtunnel URL is correct.</div>`;
+            resultsDiv.innerHTML = `<div class="p-4 bg-red-50 text-red-600 rounded-lg border border-red-200"><strong>Connection Error:</strong> Could not reach the server. Ensure your Python backend is running.</div>`;
         }
     }
+
+    // --- NEW CHAT WIDGET LOGIC ---
+    function sendMessage() {
+        const inputField = document.getElementById('user-input');
+        const messageText = inputField.value.trim();
+        const selectedLanguage = document.getElementById('language-selector').value;
+        const chatHistory = document.getElementById('chat-history');
+
+        if (!messageText) return; 
+
+        // 1. Show User's Message
+        chatHistory.innerHTML += `
+            <div class="bg-indigo-600 text-white p-3 rounded-tl-xl rounded-b-xl shadow-sm max-w-[80%] text-sm self-end">
+                ${messageText}
+            </div>
+        `;
+        
+        inputField.value = "";
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+
+        // 2. Show Typing Indicator
+        const typingId = "typing-" + Date.now();
+        chatHistory.innerHTML += `
+            <div id="${typingId}" class="bg-white p-3 rounded-tr-xl rounded-b-xl shadow-sm max-w-[80%] text-sm text-gray-500 self-start border border-gray-100 italic">
+                Translating & Processing...
+            </div>
+        `;
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+
+        // 3. Send to the Python Backend /chat_proxy
+        const BACKEND_URL = 'https://rail-madad-chatbot-1094417494880.asia-south1.run.app';
+        
+        fetch(`${BACKEND_URL}/chat_proxy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                "message": messageText, 
+                "language": selectedLanguage,
+                "session_id": "session-" + Math.random().toString(36).substring(7) 
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            // Remove typing indicator
+            document.getElementById(typingId).remove();
+            
+            // Show Bot Response
+            chatHistory.innerHTML += `
+                <div class="bg-white p-3 rounded-tr-xl rounded-b-xl shadow-sm max-w-[80%] text-sm text-gray-800 self-start border border-gray-100">
+                    ${data.reply}
+                </div>
+            `;
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        })
+        .catch(error => {
+            document.getElementById(typingId).remove();
+            chatHistory.innerHTML += `
+                <div class="bg-red-50 text-red-600 p-3 rounded-tr-xl rounded-b-xl shadow-sm max-w-[80%] text-sm self-start border border-red-200">
+                    Error connecting to translation proxy. Ensure backend is running.
+                </div>
+            `;
+            console.error("Chat Error:", error);
+        });
+    }
     </script>
-
-    <script src="https://www.gstatic.com/dialogflow-console/fast/messenger/bootstrap.js?v=1"></script>
-    <df-messenger
-        intent="WELCOME"
-        chat-title="RailMadadBot1"
-        agent-id="90616304-4bce-4e49-988b-494b05b079ff"
-        language-code="en"
-    ></df-messenger>
-
 </body>
 </html>
