@@ -638,6 +638,7 @@ def webhook():
 
     # THE FIX: Thank You intent that loops back to the start and wipes memory
     # THE FIX: Moved the payload INSIDE the fulfillmentMessages array
+    # THE FIX: Corrected the chips to match your actual Welcome Menu
     elif intent_name == 'user_says_thanks':
         session_id = req.get('session')
         return jsonify({
@@ -660,7 +661,7 @@ def webhook():
                                     "type": "chips",
                                     "options": [
                                         {"text": "Register a Complaint"},
-                                        {"text": "Track Complaint"}
+                                        {"text": "Query"} # <-- FIXED THIS LINE
                                     ]
                                 }
                             ]
@@ -747,6 +748,46 @@ def track_by_phone():
         print(f"Error fetching tracking data: {e}")
         return jsonify({"error": "Database error"}), 500
 
+@app.route('/api/cron/auto-close', methods=['GET', 'POST'])
+def cron_auto_close():
+    """Background task to automatically close stale complaints after 2 minutes."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Find all open complaints older than 2 minutes (Background Automation)
+        cursor.execute("""
+            SELECT complaint_id, department FROM bot_complaints 
+            WHERE status = 'Open' 
+            AND timestamp <= NOW() - INTERVAL '2 minutes'
+        """)
+        stale_complaints = cursor.fetchall()
+        
+        closed_count = 0
+        for row in stale_complaints:
+            comp_id = row[0]
+            dept = row[1]
+            closing_statement = get_random_closing_statement(dept)
+            
+            cursor.execute("""
+                UPDATE bot_complaints 
+                SET status = 'Closed', closing_statement = %s 
+                WHERE complaint_id = %s
+            """, (closing_statement, comp_id))
+            closed_count += 1
+        
+        if stale_complaints:
+            conn.commit()
+            print(f"CRON: Automatically closed {closed_count} complaints.")
+            
+        conn.close()
+        
+        return jsonify({"status": "success", "closed_complaints": closed_count})
+
+    except Exception as e:
+        print(f"CRON ERROR: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+    
 # --- 6. ADMIN DASHBOARD PAGES ---
 def get_db_as_html_table(query):
     try:
