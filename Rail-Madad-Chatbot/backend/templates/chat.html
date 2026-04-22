@@ -18,23 +18,22 @@
 </head>
 <body class="bg-gradient-to-br from-slate-50 via-indigo-50 to-blue-100 font-sans min-h-screen">
 
-    <div class="flex flex-col items-center justify-center p-6 text-center space-y-6">
+    <div class="flex flex-col items-center justify-center p-6 text-center space-y-6 pb-32">
         <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-8 border border-white/50 backdrop-blur-sm">
             <h1 class="text-3xl md:text-4xl font-bold text-indigo-800 tracking-tight">AI-Powered Rail Madad</h1>
-            <p class="text-gray-500 mt-2 font-medium">Final Year Computer Engineering Project</p>
+            <p class="text-gray-500 mt-2 font-medium text-sm">Final Year Computer Engineering Project</p>
             
             <div class="mt-8 pt-6 border-t border-gray-100">
                 <div class="flex justify-center items-center space-x-8 opacity-80 grayscale hover:grayscale-0 transition-all">
                     <img src="https://logowik.com/content/uploads/images/indian-railways-blue2669.logowik.com.webp" alt="Railways" class="h-10 object-contain">
                     <img src="https://govtjobfix.com/wp-content/uploads/2019/07/Centre-for-Railway-Information-Systems-CRIS.png" alt="CRIS" class="h-10 object-contain">
-                    <img src="https://images.seeklogo.com/logo-png/18/1/irctc-logo-png_seeklogo-184098.png" alt="IRCTC" class="h-10 object-contain">
                 </div>
             </div>
         </div>
 
         <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-8 text-left border-t-4 border-indigo-600">
-            <h2 class="text-xl font-bold text-gray-800 mb-2">Track Complaint Status</h2>
-            <p class="text-sm text-gray-500 mb-6">Real-time status retrieval from Cloud SQL database.</p>
+            <h2 class="text-xl font-bold text-gray-800 mb-1">Track Complaint Status</h2>
+            <p class="text-xs text-gray-400 mb-6 uppercase tracking-wider font-bold">Real-time Cloud SQL Access</p>
             
             <div class="flex flex-col sm:flex-row gap-3">
                 <input type="text" id="trackPhoneInput" maxlength="10" placeholder="Enter 10-digit mobile" 
@@ -46,6 +45,21 @@
             </div>
             <div id="trackingResults" class="mt-6"></div>
         </div>
+
+        <div class="w-full max-w-2xl text-left space-y-4 px-2">
+            <div class="p-4 bg-amber-50 rounded-xl border border-amber-100">
+                <h4 class="text-amber-800 font-bold text-xs uppercase mb-1">⚠️ Academic Disclaimer</h4>
+                <p class="text-amber-700 text-[11px] leading-relaxed">
+                    This is a student research prototype for a Final Year Engineering Project. This application is <strong>NOT</strong> affiliated with the Ministry of Railways or CRIS. All data submitted here is for demonstration purposes only.
+                </p>
+            </div>
+            <div class="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                <h4 class="text-blue-800 font-bold text-xs uppercase mb-1">🤖 AI-Powered System</h4>
+                <p class="text-blue-700 text-[11px] leading-relaxed">
+                    Powered by Google Gemini 3 and Dialogflow ES. Multilingual support provided by Cloud Translation API. Real-time complaint tracking is managed via a PostgreSQL Cloud SQL instance.
+                </p>
+            </div>
+        </div>
     </div>
 
     <div class="fixed bottom-6 right-6 w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col h-[580px] z-50 transition-all duration-500 transform hover:scale-[1.01]">
@@ -55,21 +69,21 @@
                 <div class="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-xl">🤖</div>
                 <div>
                     <h3 class="font-bold text-sm leading-tight">Rail Madad Support</h3>
-                    <span class="text-[10px] text-indigo-200 uppercase tracking-widest font-bold">AI Assistant</span>
+                    <span class="text-[10px] text-indigo-200 uppercase tracking-widest font-bold">Live AI Agent</span>
                 </div>
             </div>
             <select id="language-selector" class="bg-indigo-700 text-white text-[10px] rounded-lg p-1.5 font-bold border border-indigo-400 focus:outline-none">
                 <option value="en">English</option>
                 <option value="hi">हिंदी (Hindi)</option>
                 <option value="mr">मराठी (Marathi)</option>
-                <option value="gu">ગુજરાતી (Gujarati)</option>
-                <option value="ta">தமிழ் (Tamil)</option>
             </select>
         </div>
 
         <div id="chat-history" class="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50/50 scroll-smooth">
-            <div class="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm max-w-[85%] text-xs text-gray-700 self-start border border-gray-100 leading-relaxed">
-                Welcome to Rail Madad! Please select your language and describe your issue.
+            <div class="flex flex-col items-center justify-center py-10 opacity-60" id="welcome-intro">
+                <div class="w-16 h-16 bg-indigo-100 rounded-full flex items-center justify-center text-3xl mb-3 animate-bounce">👋</div>
+                <p class="text-gray-500 font-bold text-sm">Welcome to Rail Madad</p>
+                <p class="text-[10px] text-gray-400 uppercase tracking-widest">How can we help you today?</p>
             </div>
         </div>
 
@@ -89,17 +103,22 @@
     const BACKEND_URL = 'https://rail-madad-chatbot-1094417494880.asia-south1.run.app';
     const SESSION_ID = "session-" + Math.random().toString(36).substring(7);
 
-    // --- 1. TRACKING LOGIC ---
+    // AUTO-START THE BOT UPON PAGE LOAD
+    window.onload = function() {
+        // Automatically triggers the "Welcome" intent from Dialogflow
+        autoSendMessage("Hi"); 
+    };
+
     async function trackComplaint() {
         const phoneNumber = document.getElementById('trackPhoneInput').value.trim();
         const resultsDiv = document.getElementById('trackingResults');
 
         if (phoneNumber.length !== 10 || isNaN(phoneNumber)) {
-            resultsDiv.innerHTML = `<div class="p-3 bg-red-50 text-red-600 rounded-xl border border-red-100 text-sm">Please enter a valid 10-digit mobile number.</div>`;
+            resultsDiv.innerHTML = `<div class="p-3 bg-red-50 text-red-600 rounded-xl border border-red-100 text-sm">Valid 10-digit number required.</div>`;
             return;
         }
 
-        resultsDiv.innerHTML = `<div class="text-indigo-600 animate-pulse text-sm font-bold text-center">Fetching records...</div>`;
+        resultsDiv.innerHTML = `<div class="text-indigo-600 animate-pulse text-xs font-bold text-center">Syncing with Cloud SQL...</div>`;
 
         try {
             const response = await fetch(`${BACKEND_URL}/api/track`, {
@@ -107,7 +126,6 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ phone_number: phoneNumber })
             });
-
             const data = await response.json();
 
             if (data.complaints && data.complaints.length > 0) {
@@ -115,36 +133,30 @@
                 data.complaints.forEach(complaint => {
                     const isClosed = complaint.status.toLowerCase() === 'closed';
                     const statusClass = isClosed ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700';
-                    
                     htmlOutput += `
                         <div class="p-4 border border-gray-100 rounded-xl bg-gray-50/50 relative">
-                            <span class="absolute top-4 right-4 px-2 py-1 rounded text-[10px] font-black uppercase ${statusClass}">
-                                ${complaint.status}
-                            </span>
-                            <div class="text-[10px] text-gray-400 font-bold uppercase mb-1">${complaint.date}</div>
-                            <div class="font-bold text-gray-800 text-sm mb-1">${complaint.id} <span class="text-indigo-600">• ${complaint.department}</span></div>
-                            <p class="text-xs text-gray-600 italic mb-2">"${complaint.description}"</p>
-                            <div class="text-[11px] p-2 bg-white rounded border border-gray-100 text-gray-700">
-                                <strong>Update:</strong> ${complaint.resolution || 'Assigned to official.'}
-                            </div>
+                            <span class="absolute top-4 right-4 px-2 py-1 rounded text-[9px] font-black uppercase ${statusClass}">${complaint.status}</span>
+                            <div class="text-[9px] text-gray-400 font-bold mb-1">${complaint.date}</div>
+                            <div class="font-bold text-gray-800 text-xs mb-1">${complaint.id} <span class="text-indigo-600">• ${complaint.department}</span></div>
+                            <p class="text-[11px] text-gray-600 italic mb-2">"${complaint.description}"</p>
+                            <div class="text-[10px] p-2 bg-white rounded border border-gray-100 text-gray-700 font-medium">↳ Update: ${complaint.resolution || 'Assigned to official.'}</div>
                         </div>`;
                 });
                 resultsDiv.innerHTML = htmlOutput + "</div>";
             } else {
-                resultsDiv.innerHTML = `<div class="p-3 bg-amber-50 text-amber-700 rounded-xl border border-amber-100 text-sm text-center">No complaints found for this number.</div>`;
+                resultsDiv.innerHTML = `<div class="p-3 bg-amber-50 text-amber-700 rounded-xl border border-amber-100 text-sm text-center font-medium">No complaints linked to this number.</div>`;
             }
         } catch (error) {
-            resultsDiv.innerHTML = `<div class="p-3 bg-red-50 text-red-600 rounded-xl border border-red-100 text-sm">Connection Error. Is the backend live?</div>`;
+            resultsDiv.innerHTML = `<div class="p-3 bg-red-50 text-red-600 rounded-xl border border-red-100 text-sm">Database connection lost.</div>`;
         }
     }
 
-    // --- 2. CHAT LOGIC ---
     function autoSendMessage(text) {
         document.getElementById('user-input').value = text;
-        sendMessage();
+        sendMessage(true); // 'true' means this is a background/system call
     }
 
-    async function sendMessage() {
+    async function sendMessage(isSystemMessage = false) {
         const inputField = document.getElementById('user-input');
         const messageText = inputField.value.trim();
         const selectedLanguage = document.getElementById('language-selector').value;
@@ -152,22 +164,25 @@
 
         if (!messageText) return; 
 
-        // User Bubble
-        chatHistory.innerHTML += `
-            <div class="bg-indigo-600 text-white p-3 rounded-2xl rounded-br-none shadow-md max-w-[85%] text-xs self-end leading-relaxed">
-                ${messageText}
-            </div>
-        `;
+        // 1. Hide the "Intro Bubble" once user starts interacting
+        const intro = document.getElementById('welcome-intro');
+        if(intro) intro.style.display = 'none';
+
+        // 2. Only show user's message bubble if it's NOT the hidden "Hi" system call
+        if (!isSystemMessage) {
+            chatHistory.innerHTML += `
+                <div class="bg-indigo-600 text-white p-3 rounded-2xl rounded-br-none shadow-md max-w-[85%] text-xs self-end leading-relaxed">
+                    ${messageText}
+                </div>
+            `;
+        }
         
         inputField.value = "";
         chatHistory.scrollTop = chatHistory.scrollHeight;
 
-        // Typing Indicator
         const typingId = "typing-" + Date.now();
         chatHistory.innerHTML += `
-            <div id="${typingId}" class="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm max-w-[80%] text-[11px] text-gray-400 self-start border border-gray-100 italic animate-pulse">
-                Thinking...
-            </div>
+            <div id="${typingId}" class="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm max-w-[80%] text-[10px] text-gray-400 self-start border border-gray-100 italic animate-pulse">Thinking...</div>
         `;
         chatHistory.scrollTop = chatHistory.scrollHeight;
 
@@ -183,33 +198,25 @@
             });
 
             const data = await response.json();
-            document.getElementById(typingId).remove();
+            const typingEl = document.getElementById(typingId);
+            if(typingEl) typingEl.remove();
             
-            // Bot Response Text
             chatHistory.innerHTML += `
-                <div class="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm max-w-[85%] text-xs text-gray-800 self-start border border-gray-100 leading-relaxed">
-                    ${data.reply}
-                </div>
+                <div class="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm max-w-[85%] text-xs text-gray-800 self-start border border-gray-100 leading-relaxed">${data.reply}</div>
             `;
 
-            // Bot Buttons (Chips)
             if (data.buttons && data.buttons.length > 0) {
                 let chipsHtml = `<div class="flex flex-wrap gap-2 mt-1 self-start max-w-[90%]">`;
                 data.buttons.forEach(btn => {
-                    chipsHtml += `
-                        <button onclick="autoSendMessage('${btn.text}')" 
-                                class="bg-white border border-indigo-200 text-indigo-600 px-3 py-1.5 rounded-full text-[10px] font-bold hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all shadow-sm">
-                            ${btn.text}
-                        </button>`;
+                    chipsHtml += `<button onclick="autoSendMessage('${btn.text}')" class="bg-white border border-indigo-200 text-indigo-600 px-3 py-1.5 rounded-full text-[10px] font-bold hover:bg-indigo-600 hover:text-white transition-all shadow-sm">${btn.text}</button>`;
                 });
                 chatHistory.innerHTML += chipsHtml + `</div>`;
             }
-            
             chatHistory.scrollTop = chatHistory.scrollHeight;
-
         } catch (error) {
-            if(document.getElementById(typingId)) document.getElementById(typingId).remove();
-            chatHistory.innerHTML += `<div class="text-[10px] text-red-500 font-bold text-center p-2">Failed to reach AI server.</div>`;
+            const typingEl = document.getElementById(typingId);
+            if(typingEl) typingEl.remove();
+            chatHistory.innerHTML += `<div class="text-[9px] text-red-500 font-bold text-center p-2">AI server connection error.</div>`;
         }
     }
     </script>
