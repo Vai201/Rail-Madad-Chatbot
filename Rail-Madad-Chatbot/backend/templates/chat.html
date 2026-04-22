@@ -3,128 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rail Madad Prototype</title>
+    <title>Rail Madad AI Prototype</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         theme: {
-          fontFamily: {
-            sans: ['Inter', 'sans-serif'],
+          extend: {
+            fontFamily: { sans: ['Inter', 'sans-serif'] },
           },
         }
       }
     </script>
 </head>
-<body class="bg-gradient-to-br from-blue-100 via-indigo-100 to-purple-200 font-sans">
+<body class="bg-gradient-to-br from-slate-50 via-indigo-50 to-blue-100 font-sans min-h-screen">
 
-    <div class="flex flex-col items-center justify-center min-h-screen p-8 text-center space-y-6">
-
-        <div class="w-full max-w-2xl bg-white rounded-xl shadow-2xl p-8 md:p-12">
-            <h1 class="text-3xl md:text-4xl font-bold text-indigo-700">AI-Powered Rail Madad</h1>
-            <p class="text-lg text-gray-600 mt-2">Complaint System Prototype</p>
+    <div class="flex flex-col items-center justify-center p-6 text-center space-y-6">
+        <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-8 border border-white/50 backdrop-blur-sm">
+            <h1 class="text-3xl md:text-4xl font-bold text-indigo-800 tracking-tight">AI-Powered Rail Madad</h1>
+            <p class="text-gray-500 mt-2 font-medium">Final Year Computer Engineering Project</p>
             
-            <p class="mt-6 text-gray-700">
-                Welcome to the demonstration page. Please use the custom chat window in the
-                <strong class="text-indigo-600">bottom-right corner</strong> 
-                to interact with the AI assistant in multiple languages.
-            </p>
-            
-            <div class="mt-8 pt-6 border-t border-gray-200">
-                <p class="text-sm text-gray-500 mb-4">Built and Designed For:</p>
-                <div class="flex justify-center items-center space-x-6">
-                    <img src="https://logowik.com/content/uploads/images/indian-railways-blue2669.logowik.com.webp" 
-                         alt="Indian Railways Logo" class="h-12 object-contain"
-                         onerror="this.onerror=null;this.src='https://placehold.co/120x50?text=Indian+Railways';">
-                    <img src="https://govtjobfix.com/wp-content/uploads/2019/07/Centre-for-Railway-Information-Systems-CRIS.png" 
-                         alt="CRIS Logo" class="h-12 object-contain"
-                         onerror="this.onerror=null;this.src='https://placehold.co/80x50?text=CRIS';">
-                    <img src="https://images.seeklogo.com/logo-png/18/1/irctc-logo-png_seeklogo-184098.png" 
-                         alt="IRCTC Logo" class="h-12 object-contain"
-                         onerror="this.onerror=null;this.src='https://placehold.co/90x50?text=IRCTC';">
+            <div class="mt-8 pt-6 border-t border-gray-100">
+                <div class="flex justify-center items-center space-x-8 opacity-80 grayscale hover:grayscale-0 transition-all">
+                    <img src="https://logowik.com/content/uploads/images/indian-railways-blue2669.logowik.com.webp" alt="Railways" class="h-10 object-contain">
+                    <img src="https://govtjobfix.com/wp-content/uploads/2019/07/Centre-for-Railway-Information-Systems-CRIS.png" alt="CRIS" class="h-10 object-contain">
+                    <img src="https://images.seeklogo.com/logo-png/18/1/irctc-logo-png_seeklogo-184098.png" alt="IRCTC" class="h-10 object-contain">
                 </div>
             </div>
         </div>
 
-        <div class="w-full max-w-2xl bg-white rounded-xl shadow-2xl p-8 text-left border-t-4 border-indigo-600">
-            <h2 class="text-2xl font-bold text-gray-800 mb-4">Track Your Complaint</h2>
-            <p class="text-gray-600 mb-4">Enter the 10-digit mobile number used to register your complaint to view its current status.</p>
+        <div class="w-full max-w-2xl bg-white rounded-2xl shadow-xl p-8 text-left border-t-4 border-indigo-600">
+            <h2 class="text-xl font-bold text-gray-800 mb-2">Track Complaint Status</h2>
+            <p class="text-sm text-gray-500 mb-6">Real-time status retrieval from Cloud SQL database.</p>
             
-            <div class="flex flex-col sm:flex-row gap-4">
-                <input type="text" id="trackPhoneInput" maxlength="10" placeholder="e.g. 9876543210" 
-                       class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-lg">
+            <div class="flex flex-col sm:flex-row gap-3">
+                <input type="text" id="trackPhoneInput" maxlength="10" placeholder="Enter 10-digit mobile" 
+                       class="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-lg transition-all">
                 <button onclick="trackComplaint()" 
-                        class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-8 rounded-lg transition duration-300 shadow-md">
-                    Check Status
+                        class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-8 rounded-xl transition duration-300 shadow-lg shadow-indigo-200">
+                    Search
                 </button>
             </div>
-
             <div id="trackingResults" class="mt-6"></div>
         </div>
-        
-        <div class="w-full max-w-2xl text-left bg-white/70 backdrop-blur-sm rounded-xl shadow-lg p-6 border border-gray-200">
-            <ul class="text-xs text-gray-700 space-y-2">
-                <li><strong class="text-gray-900">Note:</strong> This is a functional prototype built for demonstration purposes.</li>
-                <li><strong class="text-gray-900">Disclaimer:</strong> All data is mock data and has no connection to real-world information.</li>
-                <li><strong class="text-gray-900">Test PNRs:</strong> Loaded with PNRs from 0000000001 to 0000030001.</li>
-            </ul>
-        </div>
-
     </div>
 
-    <div class="fixed bottom-6 right-6 w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col h-[550px] z-50">
+    <div class="fixed bottom-6 right-6 w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col h-[580px] z-50 transition-all duration-500 transform hover:scale-[1.01]">
         
-        <div class="bg-indigo-600 p-4 text-white flex justify-between items-center shadow-md z-10">
-            <h3 class="font-bold flex items-center gap-2">
-                <span class="text-xl">🤖</span> Rail Madad AI
-            </h3>
-            <select id="language-selector" class="text-gray-900 text-xs rounded p-1 font-medium focus:outline-none focus:ring-2 focus:ring-white">
+        <div class="bg-indigo-600 p-4 text-white flex justify-between items-center shadow-lg">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center text-xl">🤖</div>
+                <div>
+                    <h3 class="font-bold text-sm leading-tight">Rail Madad Support</h3>
+                    <span class="text-[10px] text-indigo-200 uppercase tracking-widest font-bold">AI Assistant</span>
+                </div>
+            </div>
+            <select id="language-selector" class="bg-indigo-700 text-white text-[10px] rounded-lg p-1.5 font-bold border border-indigo-400 focus:outline-none">
                 <option value="en">English</option>
-                <option value="hi">Hindi (हिंदी)</option>
-                <option value="mr">Marathi (मराठी)</option>
-                <option value="gu">Gujarati (ગુજરાતી)</option>
-                <option value="bn">Bengali (বাংলা)</option>
-                <option value="ta">Tamil (தமிழ்)</option>
-                <option value="te">Telugu (తెలుగు)</option>
-                <option value="kn">Kannada (ಕನ್ನಡ)</option>
-                <option value="ml">Malayalam (മലയാളം)</option>
-                <option value="pa">Punjabi (ਪੰਜਾਬੀ)</option>
+                <option value="hi">हिंदी (Hindi)</option>
+                <option value="mr">मराठी (Marathi)</option>
+                <option value="gu">ગુજરાતી (Gujarati)</option>
+                <option value="ta">தமிழ் (Tamil)</option>
             </select>
         </div>
 
-        <div id="chat-history" class="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50 flex flex-col">
-            <div class="bg-white p-3 rounded-tr-xl rounded-b-xl shadow-sm max-w-[80%] text-sm text-gray-800 self-start border border-gray-100">
-                Welcome to Rail Madad! Please select your preferred language above, then describe your complaint or query.
+        <div id="chat-history" class="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50/50 scroll-smooth">
+            <div class="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm max-w-[85%] text-xs text-gray-700 self-start border border-gray-100 leading-relaxed">
+                Welcome to Rail Madad! Please select your language and describe your issue.
             </div>
         </div>
 
-        <div class="p-3 bg-white border-t border-gray-200 flex gap-2">
+        <div class="p-4 bg-white border-t border-gray-100 flex gap-2">
             <input type="text" id="user-input" 
-                   class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500" 
-                   placeholder="Type your message..."
+                   class="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all" 
+                   placeholder="Type a message..."
                    onkeypress="if(event.key === 'Enter') sendMessage()">
             <button onclick="sendMessage()" 
-                    class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors shadow-sm">
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold transition-all shadow-md active:scale-95">
                 Send
             </button>
         </div>
     </div>
+
     <script>
-    // --- TRACKING LOGIC ---
+    const BACKEND_URL = 'https://rail-madad-chatbot-1094417494880.asia-south1.run.app';
+    const SESSION_ID = "session-" + Math.random().toString(36).substring(7);
+
+    // --- 1. TRACKING LOGIC ---
     async function trackComplaint() {
         const phoneNumber = document.getElementById('trackPhoneInput').value.trim();
         const resultsDiv = document.getElementById('trackingResults');
 
-        // Validation
         if (phoneNumber.length !== 10 || isNaN(phoneNumber)) {
-            resultsDiv.innerHTML = `<div class="p-4 bg-red-50 text-red-600 rounded-lg border border-red-200">Please enter a valid 10-digit mobile number.</div>`;
+            resultsDiv.innerHTML = `<div class="p-3 bg-red-50 text-red-600 rounded-xl border border-red-100 text-sm">Please enter a valid 10-digit mobile number.</div>`;
             return;
         }
 
-        resultsDiv.innerHTML = `<div class="p-4 text-indigo-600 animate-pulse text-center font-medium">Connecting to secure database...</div>`;
+        resultsDiv.innerHTML = `<div class="text-indigo-600 animate-pulse text-sm font-bold text-center">Fetching records...</div>`;
 
         try {
-            const BACKEND_URL = 'https://rail-madad-chatbot-1094417494880.asia-south1.run.app'; 
-            
             const response = await fetch(`${BACKEND_URL}/api/track`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -134,49 +111,40 @@
             const data = await response.json();
 
             if (data.complaints && data.complaints.length > 0) {
-                let htmlOutput = `<h3 class="font-bold text-gray-800 mb-3 border-b pb-2">Found ${data.complaints.length} Record(s):</h3><div class="space-y-4">`;
-                
+                let htmlOutput = `<div class="space-y-3">`;
                 data.complaints.forEach(complaint => {
                     const isClosed = complaint.status.toLowerCase() === 'closed';
-                    const statusColor = isClosed ? 'text-green-600 bg-green-50' : 'text-orange-600 bg-orange-50';
-                    const resolutionColor = isClosed ? 'text-green-700 bg-green-100/50' : 'text-gray-600 bg-gray-100';
+                    const statusClass = isClosed ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700';
                     
                     htmlOutput += `
-                        <div class="p-4 border border-gray-200 rounded-lg bg-white shadow-sm relative">
-                            <span class="absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-bold ${statusColor} border border-current">
+                        <div class="p-4 border border-gray-100 rounded-xl bg-gray-50/50 relative">
+                            <span class="absolute top-4 right-4 px-2 py-1 rounded text-[10px] font-black uppercase ${statusClass}">
                                 ${complaint.status}
                             </span>
-                            <div class="text-sm text-gray-500 mb-1">${complaint.date}</div>
-                            
-                            <div class="font-bold text-indigo-700 text-lg mb-1">
-                                ${complaint.id} 
-                                <span class="text-gray-500 font-normal text-sm ml-2">
-                                    (${complaint.department})
-                                </span>
-                            </div>
-                            
-                            <p class="text-gray-800 mb-3 italic">"${complaint.description}"</p>
-                            
-                            <div class="text-sm font-medium p-2 rounded ${resolutionColor} border ${isClosed ? 'border-green-200' : 'border-gray-200'}">
-                                ↳ Status Update: ${complaint.resolution || 'Investigation in progress...'}
+                            <div class="text-[10px] text-gray-400 font-bold uppercase mb-1">${complaint.date}</div>
+                            <div class="font-bold text-gray-800 text-sm mb-1">${complaint.id} <span class="text-indigo-600">• ${complaint.department}</span></div>
+                            <p class="text-xs text-gray-600 italic mb-2">"${complaint.description}"</p>
+                            <div class="text-[11px] p-2 bg-white rounded border border-gray-100 text-gray-700">
+                                <strong>Update:</strong> ${complaint.resolution || 'Assigned to official.'}
                             </div>
                         </div>`;
                 });
-                
-                htmlOutput += "</div>";
-                resultsDiv.innerHTML = htmlOutput;
+                resultsDiv.innerHTML = htmlOutput + "</div>";
             } else {
-                resultsDiv.innerHTML = `<div class="p-4 bg-yellow-50 text-yellow-700 rounded-lg border border-yellow-200">No complaints found for mobile number: <strong>${phoneNumber}</strong></div>`;
+                resultsDiv.innerHTML = `<div class="p-3 bg-amber-50 text-amber-700 rounded-xl border border-amber-100 text-sm text-center">No complaints found for this number.</div>`;
             }
-
         } catch (error) {
-            console.error("Error connecting to backend:", error);
-            resultsDiv.innerHTML = `<div class="p-4 bg-red-50 text-red-600 rounded-lg border border-red-200"><strong>Connection Error:</strong> Could not reach the server. Ensure your Python backend is running.</div>`;
+            resultsDiv.innerHTML = `<div class="p-3 bg-red-50 text-red-600 rounded-xl border border-red-100 text-sm">Connection Error. Is the backend live?</div>`;
         }
     }
 
-    // --- NEW CHAT WIDGET LOGIC ---
-    function sendMessage() {
+    // --- 2. CHAT LOGIC ---
+    function autoSendMessage(text) {
+        document.getElementById('user-input').value = text;
+        sendMessage();
+    }
+
+    async function sendMessage() {
         const inputField = document.getElementById('user-input');
         const messageText = inputField.value.trim();
         const selectedLanguage = document.getElementById('language-selector').value;
@@ -184,9 +152,9 @@
 
         if (!messageText) return; 
 
-        // 1. Show User's Message
+        // User Bubble
         chatHistory.innerHTML += `
-            <div class="bg-indigo-600 text-white p-3 rounded-tl-xl rounded-b-xl shadow-sm max-w-[80%] text-sm self-end">
+            <div class="bg-indigo-600 text-white p-3 rounded-2xl rounded-br-none shadow-md max-w-[85%] text-xs self-end leading-relaxed">
                 ${messageText}
             </div>
         `;
@@ -194,49 +162,55 @@
         inputField.value = "";
         chatHistory.scrollTop = chatHistory.scrollHeight;
 
-        // 2. Show Typing Indicator
+        // Typing Indicator
         const typingId = "typing-" + Date.now();
         chatHistory.innerHTML += `
-            <div id="${typingId}" class="bg-white p-3 rounded-tr-xl rounded-b-xl shadow-sm max-w-[80%] text-sm text-gray-500 self-start border border-gray-100 italic">
-                Translating & Processing...
+            <div id="${typingId}" class="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm max-w-[80%] text-[11px] text-gray-400 self-start border border-gray-100 italic animate-pulse">
+                Thinking...
             </div>
         `;
         chatHistory.scrollTop = chatHistory.scrollHeight;
 
-        // 3. Send to the Python Backend /chat_proxy
-        const BACKEND_URL = 'https://rail-madad-chatbot-1094417494880.asia-south1.run.app';
-        
-        fetch(`${BACKEND_URL}/chat_proxy`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                "message": messageText, 
-                "language": selectedLanguage,
-                "session_id": "session-" + Math.random().toString(36).substring(7) 
-            })
-        })
-        .then(response => response.json())
-        .then(data => {
-            // Remove typing indicator
+        try {
+            const response = await fetch(`${BACKEND_URL}/chat_proxy`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    "message": messageText, 
+                    "language": selectedLanguage,
+                    "session_id": SESSION_ID
+                })
+            });
+
+            const data = await response.json();
             document.getElementById(typingId).remove();
             
-            // Show Bot Response
+            // Bot Response Text
             chatHistory.innerHTML += `
-                <div class="bg-white p-3 rounded-tr-xl rounded-b-xl shadow-sm max-w-[80%] text-sm text-gray-800 self-start border border-gray-100">
+                <div class="bg-white p-3 rounded-2xl rounded-tl-none shadow-sm max-w-[85%] text-xs text-gray-800 self-start border border-gray-100 leading-relaxed">
                     ${data.reply}
                 </div>
             `;
+
+            // Bot Buttons (Chips)
+            if (data.buttons && data.buttons.length > 0) {
+                let chipsHtml = `<div class="flex flex-wrap gap-2 mt-1 self-start max-w-[90%]">`;
+                data.buttons.forEach(btn => {
+                    chipsHtml += `
+                        <button onclick="autoSendMessage('${btn.text}')" 
+                                class="bg-white border border-indigo-200 text-indigo-600 px-3 py-1.5 rounded-full text-[10px] font-bold hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all shadow-sm">
+                            ${btn.text}
+                        </button>`;
+                });
+                chatHistory.innerHTML += chipsHtml + `</div>`;
+            }
+            
             chatHistory.scrollTop = chatHistory.scrollHeight;
-        })
-        .catch(error => {
-            document.getElementById(typingId).remove();
-            chatHistory.innerHTML += `
-                <div class="bg-red-50 text-red-600 p-3 rounded-tr-xl rounded-b-xl shadow-sm max-w-[80%] text-sm self-start border border-red-200">
-                    Error connecting to translation proxy. Ensure backend is running.
-                </div>
-            `;
-            console.error("Chat Error:", error);
-        });
+
+        } catch (error) {
+            if(document.getElementById(typingId)) document.getElementById(typingId).remove();
+            chatHistory.innerHTML += `<div class="text-[10px] text-red-500 font-bold text-center p-2">Failed to reach AI server.</div>`;
+        }
     }
     </script>
 </body>

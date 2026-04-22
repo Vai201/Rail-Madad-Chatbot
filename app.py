@@ -708,31 +708,48 @@ def chat_proxy():
     session_id = data.get('session_id', 'default-session')
     
     try:
-        # Step 1: Translate user input INTO English
+        # 1. Translate user input INTO English
         english_input = process_translation(user_message, 'en')
         
-        # Step 2: Send the English text to Dialogflow
+        # 2. Send to Dialogflow
         session_client = dialogflow.SessionsClient()
         session = session_client.session_path(DIALOGFLOW_PROJECT_ID, session_id)
-        
         text_input = dialogflow.TextInput(text=english_input, language_code="en")
         query_input = dialogflow.QueryInput(text=text_input)
         
-        # This calls your Dialogflow agent, which might in turn trigger your /webhook!
         response = session_client.detect_intent(
             request={"session": session, "query_input": query_input}
         )
         
+        # --- NEW LOGIC: EXTRACT TEXT AND BUTTONS ---
         bot_response_english = response.query_result.fulfillment_text
+        buttons = []
+
+        # Loop through all messages to find the Custom Payload (Chips)
+        for msg in response.query_result.fulfillment_messages:
+            # Check if there is a payload with richContent
+            if msg.payload and 'richContent' in msg.payload:
+                # This pulls the actual button options
+                buttons = msg.payload['richContent'][0][0].get('options', [])
+        # --------------------------------------------
+
+        # 3. Translate the main text out to the user's language
+        final_response_text = process_translation(bot_response_english, selected_language)
         
-        # Step 3: Translate the bot's response OUT to the user's language
-        final_response = process_translation(bot_response_english, selected_language)
-        
-        return jsonify({"reply": final_response})
+        # 4. Translate each button's text as well!
+        translated_buttons = []
+        for btn in buttons:
+            translated_btn_text = process_translation(btn['text'], selected_language)
+            translated_buttons.append({"text": translated_btn_text})
+
+        return jsonify({
+            "reply": final_response_text,
+            "buttons": translated_buttons
+        })
 
     except Exception as e:
         print(f"Dialogflow Proxy Error: {e}")
-        error_msg = process_translation("I am experiencing a network issue connecting to the main server. Please try again.", selected_language)
+        error_msg = process_translation("I am experiencing a network issue.", selected_language)
         return jsonify({"reply": error_msg}), 500
 
 @app.route('/api/track', methods=['POST'])
