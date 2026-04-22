@@ -636,6 +636,11 @@ def webhook():
     elif intent_name == 'capture_user_query':
         return jsonify(handle_query_intent(req))
 
+    elif intent_name == 'user_says_thanks':
+        return jsonify({
+            "fulfillmentText": "You are very welcome! Indian Railways remains on duty to ensure your safety. Have a safe journey."
+        })
+
     # Fallback if intent is not recognized or doesn't need backend processing
     return jsonify({"fulfillmentText": "Webhook received the intent, but no backend action was required."})
 
