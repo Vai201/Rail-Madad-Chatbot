@@ -636,9 +636,42 @@ def webhook():
     elif intent_name == 'capture_user_query':
         return jsonify(handle_query_intent(req))
 
+    # THE FIX: Thank You intent that loops back to the start and wipes memory
     elif intent_name == 'user_says_thanks':
+        session_id = req.get('session')
         return jsonify({
-            "fulfillmentText": "You are very welcome! Indian Railways remains on duty to ensure your safety. Have a safe journey."
+            "fulfillmentMessages": [
+                {
+                    "text": {
+                        "text": ["You are very welcome! Indian Railways remains on duty to ensure your safety. Have a safe journey."]
+                    }
+                },
+                {
+                    "text": {
+                        "text": ["Welcome to Rail Madad, please select any one:"]
+                    }
+                }
+            ],
+            # Memory Wipe: Setting lifespanCount to 0 completely clears the old PNR and phone number
+            "outputContexts": [
+                {"name": f"{session_id}/contexts/awaiting-location", "lifespanCount": 0},
+                {"name": f"{session_id}/contexts/awaiting-complaint-description", "lifespanCount": 0},
+                {"name": f"{session_id}/contexts/awaiting-station-confirmation", "lifespanCount": 0}
+            ],
+            # Re-trigger the main menu buttons (if you are using Dialogflow rich text chips)
+            "payload": {
+                "richContent": [
+                    [
+                        {
+                            "type": "chips",
+                            "options": [
+                                {"text": "Register a Complaint"},
+                                {"text": "Track Complaint"}
+                            ]
+                        }
+                    ]
+                ]
+            }
         })
 
     # Fallback if intent is not recognized or doesn't need backend processing
