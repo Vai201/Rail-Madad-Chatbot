@@ -636,7 +636,7 @@ def webhook():
     # Get the name of the intent from Dialogflow
     intent_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
 
-    # Route to the correct helper function based on the intent
+    # --- 1. Complaint Flow Intents ---
     if intent_name == 'provide_phone_number':
         return jsonify(handle_phone_number(req))
         
@@ -652,39 +652,33 @@ def webhook():
     elif intent_name == 'capture_complaint_description':
         return jsonify(handle_complaint_logging(req))
 
+    # --- 2. Query Flow Intents ---
     elif intent_name == 'capture_user_query':
-        return jsonify(handle_query_intent(req))
+        # Added a safety check to prevent the KeyError you saw in the logs
+        params = req.get('queryResult', {}).get('parameters', {})
+        if 'user_query' in params:
+            return jsonify(handle_query_intent(req))
+        else:
+            return jsonify({"fulfillmentText": "I'm sorry, I didn't catch your query. Could you repeat that?"})
 
-    # THE FIX: Thank You intent that loops back to the start and wipes memory
-    # THE FIX: Moved the payload INSIDE the fulfillmentMessages array
-    # THE FIX: Corrected the chips to match your actual Welcome Menu
+    # --- 3. Restart/Closing Logic ---
     elif intent_name == 'user_says_thanks':
         session_id = req.get('session')
         return jsonify({
             "fulfillmentMessages": [
-                {
-                    "text": {
-                        "text": ["You are very welcome! Indian Railways remains on duty to ensure your safety. Have a safe journey."]
-                    }
-                },
-                {
-                    "text": {
-                        "text": ["Welcome to Rail Madad, please select any one:"]
-                    }
-                },
+                {"text": {"text": ["You are very welcome! Have a safe journey."]}},
+                {"text": {"text": ["Welcome to Rail Madad, please select any one:"]}},
                 {
                     "payload": {
-                        "richContent": [
-                            [
-                                {
-                                    "type": "chips",
-                                    "options": [
-                                        {"text": "Register a Complaint"},
-                                        {"text": "Query"} # <-- FIXED THIS LINE
-                                    ]
-                                }
-                            ]
-                        ]
+                        "richContent": [[
+                            {
+                                "type": "chips",
+                                "options": [
+                                    {"text": "Register a Complaint"},
+                                    {"text": "Query"}
+                                ]
+                            }
+                        ]]
                     }
                 }
             ],
@@ -695,7 +689,6 @@ def webhook():
             ]
         })
 
-    # Fallback if intent is not recognized or doesn't need backend processing
     return jsonify({"fulfillmentText": "Webhook received the intent, but no backend action was required."})
 
 @app.route('/chat_proxy', methods=['POST'])
