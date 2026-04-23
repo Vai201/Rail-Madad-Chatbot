@@ -293,20 +293,21 @@ def handle_station_confirmed(request_json):
         return {"fulfillmentText": "An error occurred. Please try again."}
 
 def handle_pnr_verification(request_json):
-    # 1. Bulletproof Parameter Extraction
     params = request_json.get('queryResult', {}).get('parameters', {})
     
-    # Check multiple possible parameter names that Dialogflow might use
+    # Extract parameter safely
     pnr_input = params.get('pnr_number') or params.get('number') or params.get('any') or ''
     
-    # 2. Format and extract digits
     pnr_input_str = str(pnr_input)
     if "." in pnr_input_str:
         pnr_input_str = pnr_input_str.split(".")[0]
         
     pnr_digits = "".join(re.findall(r'\d', pnr_input_str))
     
-    # 3. Reject invalid lengths safely
+    # THE FIX: If Dialogflow stripped the leading zeros, put them back!
+    if 0 < len(pnr_digits) < 10:
+        pnr_digits = pnr_digits.zfill(10)
+    
     if len(pnr_digits) != 10:
         return {"fulfillmentText": f"Please provide a valid 10-digit PNR. I only received {len(pnr_digits)} digits."}
     
@@ -317,12 +318,13 @@ def handle_pnr_verification(request_json):
         cursor = conn.cursor()
         cursor.execute("SELECT train_no, date_of_travel FROM pnr_records WHERE pnr_number = %s", (db_pnr_format,))
         result = cursor.fetchone()
-        release_db_connection(conn) # Return to pool
+        release_db_connection(conn)
 
         if result:
             train_no, travel_date = result
             
             pnr_list = list(pnr_digits)
+            import random # Ensure random is available
             random.shuffle(pnr_list)
             shuffled_pnr = "".join(pnr_list)
             token = f"TK-{shuffled_pnr[:6]}" 
@@ -333,7 +335,7 @@ def handle_pnr_verification(request_json):
                 "fulfillmentText": response_text,
                 "outputContexts": [
                     {
-                        "name": f"{request_json['session']}/contexts/awaiting-complaint-description",
+                        "name": f"{request_json.get('session')}/contexts/awaiting-complaint-description",
                         "lifespanCount": 1,
                         "parameters": {
                             "complaint_token": token,  
@@ -722,22 +724,28 @@ def chat_proxy():
             request={"session": session, "query_input": query_input}
         )
         
-       # --- NEW LOGIC: EXTRACT TEXT AND BUTTONS ---
+       # --- NEW LOGIC: DEEP TEXT AND BUTTON EXTRACTION ---
         bot_response_english = response.query_result.fulfillment_text
         
-        # THE SAFETY NET: If Dialogflow returns nothing, force an error message
+        # If the root text is empty, dig into the messages array to find it
         if not bot_response_english:
-            bot_response_english = "I encountered a routing error. Could you please re-enter that?"
+            for msg in response.query_result.fulfillment_messages:
+                if msg.text and msg.text.text:
+                    bot_response_english = msg.text.text[0]
+                    break
+        
+        # If it is STILL empty, it means Dialogflow timed out on the database
+        if not bot_response_english:
+            bot_response_english = "The database is waking up and took a little too long. Could you please send that last message again?"
             
         buttons = []
-
-        # Loop through all messages to find the Custom Payload (Chips)
         for msg in response.query_result.fulfillment_messages:
-            # Check if there is a payload with richContent
             if msg.payload and 'richContent' in msg.payload:
-                # This pulls the actual button options
-                buttons = msg.payload['richContent'][0][0].get('options', [])
-        # --------------------------------------------
+                try:
+                    buttons = msg.payload['richContent'][0][0].get('options', [])
+                except (IndexError, AttributeError):
+                    pass
+        # --------------------------------------------------
 
         # 3. Translate the main text out to the user's language
         final_response_text = process_translation(bot_response_english, selected_language)
