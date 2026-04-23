@@ -293,42 +293,40 @@ def handle_station_confirmed(request_json):
         return {"fulfillmentText": "An error occurred. Please try again."}
 
 def handle_pnr_verification(request_json):
-    # 1. Get the PNR from Dialogflow parameters
-    pnr_input = request_json['queryResult']['parameters'].get('pnr_number', '')
+    # 1. Bulletproof Parameter Extraction
+    params = request_json.get('queryResult', {}).get('parameters', {})
     
-    # Safely handle Dialogflow's float conversion (e.g., turning 51.0 or "51.0" into "51")
+    # Check multiple possible parameter names that Dialogflow might use
+    pnr_input = params.get('pnr_number') or params.get('number') or params.get('any') or ''
+    
+    # 2. Format and extract digits
     pnr_input_str = str(pnr_input)
     if "." in pnr_input_str:
         pnr_input_str = pnr_input_str.split(".")[0]
         
-    # 2. Extract just the digits
     pnr_digits = "".join(re.findall(r'\d', pnr_input_str))
     
-    # 🚨 NEW STRICT CHECK: If it is not exactly 10 digits, reject it instantly!
+    # 3. Reject invalid lengths safely
     if len(pnr_digits) != 10:
-        return {"fulfillmentText": f"Invalid PNR length. You entered {len(pnr_digits)} digits. Please provide a valid 10-digit PNR number."}
+        return {"fulfillmentText": f"Please provide a valid 10-digit PNR. I only received {len(pnr_digits)} digits."}
     
-    # Format the PNR to match your database format (e.g., "PNR0000003333")
     db_pnr_format = f"PNR{pnr_digits}"
     
     try:
-        # 3. Connect to SQL and search using the exact database format
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT train_no, date_of_travel FROM pnr_records WHERE pnr_number = %s", (db_pnr_format,))
         result = cursor.fetchone()
-        release_db_connection(conn)
+        release_db_connection(conn) # Return to pool
 
         if result:
             train_no, travel_date = result
             
-            # Create a token by shuffling the user's actual PNR digits
             pnr_list = list(pnr_digits)
             random.shuffle(pnr_list)
             shuffled_pnr = "".join(pnr_list)
-            token = f"TK-{shuffled_pnr[:6]}" # Uses the first 6 shuffled digits
+            token = f"TK-{shuffled_pnr[:6]}" 
             
-            # Hide the token from the user, just ask for the complaint
             response_text = f"PNR verified for Train {train_no} on {travel_date}. Please describe your complaint."
             
             return {
@@ -338,7 +336,7 @@ def handle_pnr_verification(request_json):
                         "name": f"{request_json['session']}/contexts/awaiting-complaint-description",
                         "lifespanCount": 1,
                         "parameters": {
-                            "complaint_token": token,  # The token lives secretly in the background here!
+                            "complaint_token": token,  
                             "pnr": db_pnr_format, 
                             "travel_date": travel_date 
                         }
@@ -346,12 +344,11 @@ def handle_pnr_verification(request_json):
                 ]
             }
         else:
-            # Tell the user the exact PNR wasn't found
-            return {"fulfillmentText": f"{db_pnr_format} not found in the database. Please check your ticket and try again."}
+            return {"fulfillmentText": f"PNR {pnr_digits} not found in the system. Please try again."}
             
     except Exception as e:
         print(f"Error in PNR check: {e}")
-        return {"fulfillmentText": "System error connecting to database. Please try again."}
+        return {"fulfillmentText": "System error connecting to the PNR database. Please type 'hi' to restart."}
 
 def syntax_router(text):
     """The fast, 0ms keyword matcher using strict whole-word boundaries."""
@@ -725,8 +722,13 @@ def chat_proxy():
             request={"session": session, "query_input": query_input}
         )
         
-        # --- NEW LOGIC: EXTRACT TEXT AND BUTTONS ---
+       # --- NEW LOGIC: EXTRACT TEXT AND BUTTONS ---
         bot_response_english = response.query_result.fulfillment_text
+        
+        # THE SAFETY NET: If Dialogflow returns nothing, force an error message
+        if not bot_response_english:
+            bot_response_english = "I encountered a routing error. Could you please re-enter that?"
+            
         buttons = []
 
         # Loop through all messages to find the Custom Payload (Chips)

@@ -105,7 +105,6 @@
 
     // AUTO-START THE BOT UPON PAGE LOAD
     window.onload = function() {
-        // Automatically triggers the "Welcome" intent from Dialogflow
         autoSendMessage("Hi"); 
     };
 
@@ -153,7 +152,7 @@
 
     function autoSendMessage(text) {
         document.getElementById('user-input').value = text;
-        sendMessage(true); // 'true' means this is a background/system call
+        sendMessage(true); 
     }
 
     async function sendMessage(isSystemMessage = false) {
@@ -164,11 +163,15 @@
 
         if (!messageText) return; 
 
-        // 1. Hide the "Intro Bubble" once user starts interacting
+        // --- THE BUTTON FIX: HIDE OLD BUTTONS IMMEDIATELY ---
+        const oldButtons = document.querySelectorAll('.bot-action-buttons');
+        oldButtons.forEach(btn => btn.style.display = 'none');
+        // ----------------------------------------------------
+
+        // Hide the "Intro Bubble" once user starts interacting
         const intro = document.getElementById('welcome-intro');
         if(intro) intro.style.display = 'none';
 
-        // 2. Only show user's message bubble if it's NOT the hidden "Hi" system call
         if (!isSystemMessage) {
             chatHistory.innerHTML += `
                 <div class="bg-indigo-600 text-white p-3 rounded-2xl rounded-br-none shadow-md max-w-[85%] text-xs self-end leading-relaxed">
@@ -206,7 +209,8 @@
             `;
 
             if (data.buttons && data.buttons.length > 0) {
-                let chipsHtml = `<div class="flex flex-wrap gap-2 mt-1 self-start max-w-[90%]">`;
+                // --- THE BUTTON FIX: ADDED CLASS TO CONTAINER ---
+                let chipsHtml = `<div class="bot-action-buttons flex flex-wrap gap-2 mt-1 self-start max-w-[90%]">`;
                 data.buttons.forEach(btn => {
                     chipsHtml += `<button onclick="autoSendMessage('${btn.text}')" class="bg-white border border-indigo-200 text-indigo-600 px-3 py-1.5 rounded-full text-[10px] font-bold hover:bg-indigo-600 hover:text-white transition-all shadow-sm">${btn.text}</button>`;
                 });
