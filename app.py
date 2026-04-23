@@ -725,20 +725,25 @@ def chat_proxy():
             request={"session": session, "query_input": query_input}
         )
         
-       # --- NEW LOGIC: DEEP TEXT AND BUTTON EXTRACTION ---
-        bot_response_english = response.query_result.fulfillment_text
+       # --- NEW LOGIC: MULTI-BUBBLE TEXT EXTRACTION ---
+        bot_responses = []
         
-        # If the root text is empty, dig into the messages array to find it
-        if not bot_response_english:
-            for msg in response.query_result.fulfillment_messages:
-                if msg.text and msg.text.text:
-                    bot_response_english = msg.text.text[0]
-                    break
+        # 1. Collect ALL text bubbles Dialogflow sent back
+        for msg in response.query_result.fulfillment_messages:
+            if msg.text and msg.text.text:
+                bot_responses.append(msg.text.text[0])
+                
+        # 2. Join them with HTML line breaks so they look clean in the UI
+        if bot_responses:
+            bot_response_english = "<br><br>".join(bot_responses)
+        else:
+            bot_response_english = response.query_result.fulfillment_text
         
-        # If it is STILL empty, it means Dialogflow timed out on the database
+        # 3. The Timeout Safety Net
         if not bot_response_english:
             bot_response_english = "The database is waking up and took a little too long. Could you please send that last message again?"
             
+        # 4. Extract Buttons
         buttons = []
         for msg in response.query_result.fulfillment_messages:
             if msg.payload and 'richContent' in msg.payload:
