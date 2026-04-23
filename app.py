@@ -1,8 +1,8 @@
 # backend/app.py
+# 1. Imports
 import os
 from dotenv import load_dotenv
 import psycopg2
-from psycopg2 import pool
 import random
 import re
 import pandas as pd
@@ -13,7 +13,6 @@ import google.generativeai as genai
 from google.cloud import translate_v2 as translate
 from google.cloud import dialogflow_v2 as dialogflow
 
-# Create a global connection pool
 # 2. LOAD ENV FIRST
 load_dotenv() 
 
@@ -21,21 +20,17 @@ load_dotenv()
 DB_HOST = "/cloudsql/project-f988ee73-0741-4016-82c:asia-south1:rail-madad-db"
 DB_PASS = os.getenv("DB_PASS")
 
-# 4. Create the Pool (Now DB_PASS is actually loaded)
-db_pool = psycopg2.pool.SimpleConnectionPool(
-    1, 20, # Increased max connections for your 5-user test
-    database="postgres",
-    user="postgres",
-    password=DB_PASS,
-    host=DB_HOST
-)
-
-# 5. Helper functions
+# 4. Direct Connection Helper (NO POOLING - Built for Cloud Run speed)
 def get_db_connection():
-    return db_pool.getconn()
+    return psycopg2.connect(
+        database="postgres",
+        user="postgres",
+        password=DB_PASS,
+        host=DB_HOST
+    )
 
 def release_db_connection(conn):
-    db_pool.putconn(conn)
+    conn.close() # Cleanly cut the connection to save Cloud Run memory
 
 # Configure Gemini instantly
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -297,34 +292,39 @@ def handle_pnr_verification(request_json):
     
     # Extract parameter safely
     pnr_input = params.get('pnr_number') or params.get('number') or params.get('any') or ''
-    
     pnr_input_str = str(pnr_input)
+    
     if "." in pnr_input_str:
         pnr_input_str = pnr_input_str.split(".")[0]
         
     pnr_digits = "".join(re.findall(r'\d', pnr_input_str))
     
-    # THE FIX: If Dialogflow stripped the leading zeros, put them back!
+    # Put back leading zeros if Dialogflow stripped them (e.g., "0000008788" -> "8788")
     if 0 < len(pnr_digits) < 10:
         pnr_digits = pnr_digits.zfill(10)
     
+    # STRICT PRODUCTION RULE: Must be exactly 10 digits
     if len(pnr_digits) != 10:
-        return {"fulfillmentText": f"Please provide a valid 10-digit PNR. I only received {len(pnr_digits)} digits."}
+        return {"fulfillmentText": f"Please provide a valid 10-digit PNR. I received {len(pnr_digits)} digits."}
     
     db_pnr_format = f"PNR{pnr_digits}"
     
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # Query the database
         cursor.execute("SELECT train_no, date_of_travel FROM pnr_records WHERE pnr_number = %s", (db_pnr_format,))
         result = cursor.fetchone()
         release_db_connection(conn)
 
+        # STRICT PRODUCTION RULE: Must exist in the database
         if result:
             train_no, travel_date = result
             
+            # Generate Secure Token
             pnr_list = list(pnr_digits)
-            import random # Ensure random is available
+            import random
             random.shuffle(pnr_list)
             shuffled_pnr = "".join(pnr_list)
             token = f"TK-{shuffled_pnr[:6]}" 
@@ -346,11 +346,12 @@ def handle_pnr_verification(request_json):
                 ]
             }
         else:
-            return {"fulfillmentText": f"PNR {pnr_digits} not found in the system. Please try again."}
+            # Rejects the user if the PNR is fake or missing
+            return {"fulfillmentText": f"PNR {pnr_digits} not found in the official system. Please check your ticket and try again."}
             
     except Exception as e:
         print(f"Error in PNR check: {e}")
-        return {"fulfillmentText": "System error connecting to the PNR database. Please type 'hi' to restart."}
+        return {"fulfillmentText": "We are experiencing a database connection issue. Please type 'hi' to restart."}
 
 def syntax_router(text):
     """The fast, 0ms keyword matcher using strict whole-word boundaries."""
