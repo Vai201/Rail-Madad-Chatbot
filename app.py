@@ -1,18 +1,41 @@
 # backend/app.py
+import os
+from dotenv import load_dotenv
+import psycopg2
+from psycopg2 import pool
 import random
 import re
 import pandas as pd
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import psycopg2
-import os
 import json
 import google.generativeai as genai
-from dotenv import load_dotenv # <-- Add this line near your other imports
 from google.cloud import translate_v2 as translate
 from google.cloud import dialogflow_v2 as dialogflow
 
+# Create a global connection pool
+# 2. LOAD ENV FIRST
 load_dotenv() 
+
+# 3. Define Constants
+DB_HOST = "/cloudsql/project-f988ee73-0741-4016-82c:asia-south1:rail-madad-db"
+DB_PASS = os.getenv("DB_PASS")
+
+# 4. Create the Pool (Now DB_PASS is actually loaded)
+db_pool = psycopg2.pool.SimpleConnectionPool(
+    1, 20, # Increased max connections for your 5-user test
+    database="postgres",
+    user="postgres",
+    password=DB_PASS,
+    host=DB_HOST
+)
+
+# 5. Helper functions
+def get_db_connection():
+    return db_pool.getconn()
+
+def release_db_connection(conn):
+    db_pool.putconn(conn)
 
 # Configure Gemini instantly
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -49,19 +72,7 @@ pnr_file_path = os.path.join(project_root, 'data', 'pnr_database.csv')
 stations_file_path = os.path.join(project_root, 'data', 'stations_original.csv')
 
 # 👇 ADD YOUR GOOGLE CLOUD SQL DETAILS HERE 👇
-DB_HOST = os.getenv("DB_HOST") 
-DB_NAME = "postgres"
-DB_USER = "postgres"
-DB_PASS = os.getenv("DB_PASS")
 
-def get_db_connection():
-    # We use the /cloudsql/ prefix followed by your Instance Connection Name
-    return psycopg2.connect(
-        database="postgres",
-        user="postgres",
-        password=os.getenv("DB_PASS"), 
-        host="/cloudsql/project-f988ee73-0741-4016-82c:asia-south1:rail-madad-db"
-    )
 
 print(f"Looking for PNR data at: {pnr_file_path}")
 print(f"Looking for Station data at: {stations_file_path}")
@@ -106,7 +117,7 @@ def setup_database():
         );
         ''')
         conn.commit()
-        conn.close()
+        release_db_connection(conn)
         print("✅ Cloud Database schema verified.")
         cleanup_old_complaints()
     except Exception as e:
@@ -130,7 +141,7 @@ def cleanup_old_complaints():
         deleted_count = cursor.rowcount # Check how many rows were actually deleted
         
         conn.commit()
-        conn.close()
+        release_db_connection(conn)
         
         if deleted_count > 0:
             print(f"🧹 DATA RETENTION: Automatically cleared {deleted_count} old closed complaints.")
@@ -170,7 +181,7 @@ def handle_query_intent(request_json):
     cursor.execute("INSERT INTO bot_queries (query_text) VALUES (%s) RETURNING query_id", (user_query_text,))
     new_query_id = cursor.fetchone()[0]
     conn.commit()
-    conn.close()
+    release_db_connection(conn)
     response_text = f"Thank you. Your query has been registered with ID: Q-{new_query_id}."
     return {"fulfillmentText": response_text}
 
@@ -220,7 +231,7 @@ def handle_station_search(request_json):
             (user_input, f"%{user_input}%", f"{user_input} %")
         )
         result = cursor.fetchone()
-        conn.close()
+        release_db_connection(conn)
         
         if result:
             original_station_name = result[0]
@@ -306,7 +317,7 @@ def handle_pnr_verification(request_json):
         cursor = conn.cursor()
         cursor.execute("SELECT train_no, date_of_travel FROM pnr_records WHERE pnr_number = %s", (db_pnr_format,))
         result = cursor.fetchone()
-        conn.close()
+        release_db_connection(conn)
 
         if result:
             train_no, travel_date = result
@@ -592,7 +603,7 @@ def handle_complaint_logging(request_json):
         )
         new_id = cursor.fetchone()[0]
         conn.commit()
-        conn.close()
+        release_db_connection(conn)
 
         # 7. Final Response to User (Using Multi-Bubble Logic)
         base_msg = f"Complaint registered (ID: C-{new_id}) routed to {dept} ({agency})."
@@ -788,7 +799,7 @@ def track_by_phone():
             (phone_number,)
         )
         records = cursor.fetchall()
-        conn.close()
+        release_db_connection(conn)
 
         if not records:
             return jsonify({"message": "No complaints found for this number.", "complaints": []})
@@ -845,7 +856,7 @@ def cron_auto_close():
             conn.commit()
             print(f"CRON: Automatically closed {closed_count} complaints.")
             
-        conn.close()
+        release_db_connection(conn)
         
         return jsonify({"status": "success", "closed_complaints": closed_count})
 
@@ -862,7 +873,7 @@ def get_db_as_html_table(query):
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', UserWarning)
             df = pd.read_sql_query(query, conn)
-        conn.close()
+        release_db_connection(conn)
         if df.empty:
             return "<p>No records found in this database table.</p>"
         return df.to_html(index=False, border=1, classes="table table-striped")
