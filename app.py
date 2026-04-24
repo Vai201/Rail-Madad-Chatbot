@@ -56,7 +56,76 @@ def process_translation(text, target_language):
         print(f"Translation Error: {e}")
         return text
 
+def process_passenger_query(phone_number, user_query):
+    """
+    Handles daily rate limits, applies guardrails, fetches AI response, 
+    and logs the query in PostgreSQL.
+    """
+    # 1. Use your existing connection helper
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
+    try:
+        # ==========================================
+        # A. RATE LIMIT CHECK (Max 4 per day)
+        # ==========================================
+        cursor.execute("""
+            SELECT COUNT(*) FROM passenger_queries 
+            WHERE phone_number = %s AND DATE(created_at) = CURRENT_DATE;
+        """, (phone_number,))
+        
+        query_count = cursor.fetchone()[0]
+
+        if query_count >= 4:
+            # Block the request and save API credits
+            return "You have reached the daily limit of 4 queries for this contact number. Please try again tomorrow or select 'Register a Complaint' to file a complain."
+
+        # ==========================================
+        # B. THE GUARDRAIL PROMPT
+        # ==========================================
+        strict_prompt = f"""
+        System Context: You are "RailBot", the official AI assistant for Indian Railways. 
+        Your ONLY job is to answer queries related to Indian Railways, stations, trains, PNR rules, and travel guidelines. 
+
+        Strict Rules:
+        1. If the user asks a non-railway question (e.g., coding, restaurants, weather), firmly refuse to answer that part.
+        2. If the user mixes a genuine railway question with a non-railway question, answer ONLY the railway part, and append exactly this: "Note: I am an official railway assistant and cannot assist with non-railway queries."
+        3. Keep answers concise, helpful, and polite.
+
+        User's Query: "{user_query}"
+        """
+
+        # ==========================================
+        # C. CALL GEMMA 3
+        # ==========================================
+        # Initialize the model exactly like you did in your neural_router
+        model = genai.GenerativeModel('models/gemma-3-27b-it')
+        response = model.generate_content(strict_prompt)
+        ai_response_text = response.text
+
+        # ==========================================
+        # D. LOG THE SUCCESSFUL QUERY IN DATABASE
+        # ==========================================
+        cursor.execute("""
+            INSERT INTO passenger_queries (phone_number, user_query, ai_response) 
+            VALUES (%s, %s, %s);
+        """, (phone_number, user_query, ai_response_text))
+        
+        # Commit the transaction
+        conn.commit()
+
+        # Return the AI's clean response back to the user
+        return ai_response_text
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Database/AI Error: {e}")
+        return "I am currently experiencing high network traffic. Please try your query again in a few moments."
+
+    finally:
+        # Safely release the connection using your existing helper
+        cursor.close()
+        release_db_connection(conn)
 
 # --- 1. Define Paths & Cloud DB Credentials ---
 # --- 1. Define Paths & Cloud DB Credentials ---
