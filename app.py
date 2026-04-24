@@ -96,10 +96,10 @@ def process_passenger_query(phone_number, user_query):
         """
 
         # ==========================================
-        # C. CALL GEMMA 3
+        # C. CALL GEMINI (Upgraded for Factual Accuracy)
         # ==========================================
-        # Initialize the model exactly like you did in your neural_router
-        model = genai.GenerativeModel('models/gemma-3-27b-it')
+        # Using Gemini 3.1 Flash-Lite for high-speed, cost-effective factual recall
+        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview') 
         response = model.generate_content(strict_prompt)
         ai_response_text = response.text
 
