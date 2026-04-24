@@ -148,14 +148,19 @@ def setup_database():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        
+        # 1. NEW Query Table with Rate Limiting Support
         cursor.execute('''
-        CREATE TABLE IF NOT EXISTS bot_queries (
+        CREATE TABLE IF NOT EXISTS passenger_queries (
             query_id SERIAL PRIMARY KEY,
-            query_text TEXT NOT NULL,
-            status TEXT DEFAULT 'Open',
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            phone_number VARCHAR(15) NOT NULL,
+            user_query TEXT NOT NULL,
+            ai_response TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         ''')
+        
+        # 2. Existing Complaints Table
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS bot_complaints (
             complaint_id SERIAL PRIMARY KEY,
@@ -172,7 +177,8 @@ def setup_database():
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         ''')
-        # New table to hold your PNR dataset
+        
+        # 3. PNR Table
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS pnr_records (
             pnr_number TEXT PRIMARY KEY,
@@ -238,7 +244,7 @@ except Exception as e:
     station_data_processed = None
 
 # --- 4. Helper Functions for Chatbot ---
-def handle_query_intent(request_json):
+'''def handle_query_intent(request_json):
     user_query_text = request_json['queryResult']['parameters']['user_query']
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -247,7 +253,7 @@ def handle_query_intent(request_json):
     conn.commit()
     release_db_connection(conn)
     response_text = f"Thank you. Your query has been registered with ID: Q-{new_query_id}."
-    return {"fulfillmentText": response_text}
+    return {"fulfillmentText": response_text}'''
 
 def handle_phone_number(request_json):
     raw_input = request_json['queryResult'].get('queryText', '')
@@ -732,14 +738,34 @@ def webhook():
     elif intent_name == 'capture_complaint_description':
         return jsonify(handle_complaint_logging(req))
 
-    # --- 2. Query Flow Intents ---
-    elif intent_name == 'capture_user_query':
-        # Added a safety check to prevent the KeyError you saw in the logs
-        params = req.get('queryResult', {}).get('parameters', {})
-        if 'user_query' in params:
-            return jsonify(handle_query_intent(req))
-        else:
-            return jsonify({"fulfillmentText": "I'm sorry, I didn't catch your query. Could you repeat that?"})
+    # --- 2. NEW: Query Flow Intent (Gemma 3) ---
+    elif intent_name == 'Handle_General_Query':
+        parameters = req.get('queryResult', {}).get('parameters', {})
+        phone = parameters.get('phone_number')
+        query_text = parameters.get('user_query')
+        
+        # Run our secure, rate-limited Gemma 3 function
+        final_response = process_passenger_query(phone, query_text)
+        
+        # Send the AI response AND the follow-up buttons back to the user
+        return jsonify({
+            "fulfillmentMessages": [
+                {"text": {"text": [final_response]}},
+                {
+                    "payload": {
+                        "richContent": [[
+                            {
+                                "type": "chips",
+                                "options": [
+                                    {"text": "Ask Another Query"},
+                                    {"text": "Register a Complaint"}
+                                ]
+                            }
+                        ]]
+                    }
+                }
+            ]
+        })
 
     # --- 3. Restart/Closing Logic ---
     elif intent_name == 'user_says_thanks':
