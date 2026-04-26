@@ -660,10 +660,10 @@ def handle_complaint_logging(request_json):
                     print(f"Agency assignment error: {e}")
 
         # 4. PRIVACY LOGIC: Full Data vs. Redacted
-        if dept in ["Security", "Medical Assistance"]:
-            pnr_to_store = pnr  # Full PNR for RPF/Medical
-        else:
-            pnr_to_store = f"REDACTED ({token})" # Hidden for others
+        # 4. PRIVACY LOGIC: Moved to View Layer (RBAC)
+        # We now store the REAL PNR in the database as the "Single Source of Truth".
+        # Dynamic Data Masking will happen in the /hod-dashboard route.
+        pnr_to_store = pnr if pnr else "UNRESERVED"
 
         # 5. ALL Complaints start as 'Open' (No instant closing)
         status = "Open"
@@ -1041,7 +1041,9 @@ def admin_dashboard():
             <h1>Rail Madad Admin Dashboard</h1>
             <p>Select a database to view:</p>
             <ul>
-                <li><a href="/view-complaints" style="font-size: 1.5em;">View Complaints Log</a></li>
+                <li><a href="/department-dashboard" style="font-size: 1.5em; color: #d93025; font-weight: bold;">🔒 Secure Department Portal (RBAC Demo)</a></li>
+                <br>
+                <li><a href="/view-complaints" style="font-size: 1.5em;">View Master Complaints Log</a></li>
                 <li><a href="/view-pnrs" style="font-size: 1.5em;">View PNR Database (Sample)</a></li>
                 <li><a href="/view-stations" style="font-size: 1.5em;">View Station Database (Sample)</a></li>
             </ul>
@@ -1073,6 +1075,137 @@ def view_stations():
     query = "SELECT * FROM stations LIMIT 100" 
     table_html = get_db_as_html_table(query)
     return get_page_template("Station Database (First 100 Rows)", table_html)
+
+@app.route('/department-dashboard')
+def department_dashboard():
+    # Default to Catering if no department is selected
+    selected_dept = request.args.get('dept', 'Catering & Food')
+    
+    departments = [
+        "Catering & Food", "Sanitation & Cleaning", 
+        "Maintenance & Electrical", "Security", "Medical Assistance"
+    ]
+    
+    # Fetch data from the single source of truth, joined with PNR records
+    query = """
+        SELECT c.complaint_id, c.timestamp, c.phone_number, c.pnr, c.token, 
+               c.complaint_text, c.status, p.train_no, p.date_of_travel
+        FROM bot_complaints c
+        LEFT JOIN pnr_records p ON c.pnr = p.pnr_number
+        WHERE c.department = %s
+        ORDER BY c.timestamp DESC
+    """
+    
+    table_rows = ""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(query, (selected_dept,))
+        records = cursor.fetchall()
+        release_db_connection(conn)
+        
+        for row in records:
+            comp_id, ts, phone, pnr, token, text, status, train_no, travel_date = row
+            
+            # Deterministically mock coach/seat based on PNR hash for the prototype demo
+            mock_coach = f"{random.choice(['B','A','S'])}{hash(pnr) % 9 + 1}" if pnr and pnr != "UNRESERVED" else "N/A"
+            mock_seat = str(hash(pnr) % 72 + 1) if pnr and pnr != "UNRESERVED" else "N/A"
+            
+            # ==========================================
+            # RBAC DYNAMIC DATA MASKING ENGINE
+            # ==========================================
+            if selected_dept in ["Security", "Medical Assistance"]:
+                # High Privilege Department: Full Access
+                display_phone = phone
+                display_pnr = pnr
+                display_coach = mock_coach
+                display_seat = mock_seat
+            else:
+                # Low Privilege Department (Food/Sanitation): Redacted Access
+                display_phone = f"******{phone[-4:]}" if phone and len(phone) >= 4 else "REDACTED"
+                display_pnr = f"REDACTED (TK-{token[-4:]})" if token else "REDACTED"
+                display_coach = "🔒 MASKED"
+                display_seat = "🔒 MASKED"
+            # ==========================================
+            
+            train_display = train_no if train_no else "N/A"
+            date_display = travel_date if travel_date else "N/A"
+            
+            status_color = "green" if status == "Closed" else "orange"
+            
+            table_rows += f"""
+            <tr>
+                <td>C-{comp_id}</td>
+                <td>{ts.strftime('%Y-%m-%d %H:%M')}</td>
+                <td style="font-family: monospace; font-weight: bold;">{display_phone}</td>
+                <td style="font-family: monospace; color: #d93025;">{display_pnr}</td>
+                <td><b>{train_display}</b></td>
+                <td>{date_display}</td>
+                <td style="color: #1a73e8; font-weight: bold;">{display_coach}</td>
+                <td style="color: #1a73e8; font-weight: bold;">{display_seat}</td>
+                <td>{text}</td>
+                <td><b style="color:{status_color};">{status}</b></td>
+            </tr>
+            """
+    except Exception as e:
+        table_rows = f"<tr><td colspan='10'>Database Error: {e}</td></tr>"
+
+    # Generate the dropdown options
+    dropdown_options = ""
+    for d in departments:
+        selected = "selected" if d == selected_dept else ""
+        dropdown_options += f'<option value="{d}">{d} Portal</option>'
+
+    # Return the secure HTML View
+    return f"""
+    <html>
+        <head>
+            <title>Secure Department Portal</title>
+            <style>
+                body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f9; padding: 20px; }}
+                .header {{ background: #1a2035; color: white; padding: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }}
+                select {{ padding: 10px; font-size: 16px; border-radius: 5px; cursor: pointer; }}
+                .table-container {{ background: white; padding: 20px; border-radius: 8px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; }}
+                table {{ width: 100%; border-collapse: collapse; text-align: left; }}
+                th, td {{ padding: 12px; border-bottom: 1px solid #ddd; }}
+                th {{ background: #f8f9fa; color: #333; }}
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <div>
+                    <h1 style="margin:0;">🔒 Secure Department Portal</h1>
+                    <p style="margin:5px 0 0 0; color: #aaa;">Role-Based Access Control (RBAC) & Dynamic Data Masking Demo</p>
+                </div>
+                <form method="GET" action="/department-dashboard">
+                    <select name="dept" onchange="this.form.submit()">
+                        {dropdown_options}
+                    </select>
+                </form>
+            </div>
+            
+            <div class="table-container">
+                <table>
+                    <tr>
+                        <th>ID</th>
+                        <th>Timestamp</th>
+                        <th>Passenger Phone</th>
+                        <th>PNR Number</th>
+                        <th>Train No</th>
+                        <th>Travel Date</th>
+                        <th>Coach</th>
+                        <th>Seat</th>
+                        <th>Complaint Details</th>
+                        <th>Status</th>
+                    </tr>
+                    {table_rows}
+                </table>
+            </div>
+            <br>
+            <a href="/admin" style="color: #1a73e8; text-decoration: none;">⬅ Back to Master Admin</a>
+        </body>
+    </html>
+    """
 
 # --- 7. Run the Server ---
 if __name__ == '__main__':
