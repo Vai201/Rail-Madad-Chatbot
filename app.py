@@ -1081,15 +1081,17 @@ def department_dashboard():
     # Default to Catering if no department is selected
     selected_dept = request.args.get('dept', 'Catering & Food')
     
+    # 1. FIXED: All departments from syntax_router included
     departments = [
-        "Catering & Food", "Sanitation & Cleaning", 
-        "Maintenance & Electrical", "Security", "Medical Assistance"
+        "Sanitation & Cleaning", "Catering & Food", "Maintenance & Electrical", 
+        "Ticketing & Refunds", "Luggage & Parcels", "Staff Behavior", 
+        "Water Supply", "Security", "Medical Assistance", "General"
     ]
     
-    # Fetch data from the single source of truth, joined with PNR records
+    # 2. FIXED: Added c.station, c.travel_date, and c.closing_statement
     query = """
         SELECT c.complaint_id, c.timestamp, c.phone_number, c.pnr, c.token, 
-               c.complaint_text, c.status, p.train_no, p.date_of_travel
+               c.complaint_text, c.status, p.train_no, c.travel_date, c.closing_statement, c.station
         FROM bot_complaints c
         LEFT JOIN pnr_records p ON c.pnr = p.pnr_number
         WHERE c.department = %s
@@ -1105,11 +1107,11 @@ def department_dashboard():
         release_db_connection(conn)
         
         for row in records:
-            comp_id, ts, phone, pnr, token, text, status, train_no, travel_date = row
+            comp_id, ts, phone, pnr, token, text, status, train_no, travel_date, closing_statement, station = row
             
             # Deterministically mock coach/seat based on PNR hash for the prototype demo
-            mock_coach = f"{random.choice(['B','A','S'])}{hash(pnr) % 9 + 1}" if pnr and pnr != "UNRESERVED" else "N/A"
-            mock_seat = str(hash(pnr) % 72 + 1) if pnr and pnr != "UNRESERVED" else "N/A"
+            mock_coach = f"{random.choice(['B','A','S'])}{hash(pnr) % 9 + 1}" if pnr and pnr != "UNRESERVED" and not str(pnr).startswith("REDACTED") else "N/A"
+            mock_seat = str(hash(pnr) % 72 + 1) if pnr and pnr != "UNRESERVED" and not str(pnr).startswith("REDACTED") else "N/A"
             
             # ==========================================
             # RBAC DYNAMIC DATA MASKING ENGINE
@@ -1121,17 +1123,23 @@ def department_dashboard():
                 display_coach = mock_coach
                 display_seat = mock_seat
             else:
-                # Low Privilege Department (Food/Sanitation): Redacted Access
+                # Low Privilege Department: Redacted Access
                 display_phone = f"******{phone[-4:]}" if phone and len(phone) >= 4 else "REDACTED"
                 display_pnr = f"REDACTED (TK-{token[-4:]})" if token else "REDACTED"
                 display_coach = "🔒 MASKED"
                 display_seat = "🔒 MASKED"
             # ==========================================
             
+            # 3. FIXED: Handle Legacy Data for Train/Date
             train_display = train_no if train_no else "N/A"
             date_display = travel_date if travel_date else "N/A"
+            station_display = station if station else "Not Provided"
             
+            # 4. FIXED: Display Closing Statement cleanly
             status_color = "green" if status == "Closed" else "orange"
+            status_html = f'<b style="color:{status_color};">{status}</b>'
+            if status == "Closed" and closing_statement:
+                status_html += f'<br><span style="font-size: 0.85em; color: #555; display:block; margin-top:4px;">{closing_statement}</span>'
             
             table_rows += f"""
             <tr>
@@ -1141,20 +1149,22 @@ def department_dashboard():
                 <td style="font-family: monospace; color: #d93025;">{display_pnr}</td>
                 <td><b>{train_display}</b></td>
                 <td>{date_display}</td>
+                <td style="color: #0f9d58; font-weight: bold;">{station_display}</td>
                 <td style="color: #1a73e8; font-weight: bold;">{display_coach}</td>
                 <td style="color: #1a73e8; font-weight: bold;">{display_seat}</td>
                 <td>{text}</td>
-                <td><b style="color:{status_color};">{status}</b></td>
+                <td>{status_html}</td>
             </tr>
             """
     except Exception as e:
-        table_rows = f"<tr><td colspan='10'>Database Error: {e}</td></tr>"
+        table_rows = f"<tr><td colspan='11'>Database Error: {e}</td></tr>"
 
-    # Generate the dropdown options
+    # 5. FIXED: Dropdown active state bug
     dropdown_options = ""
     for d in departments:
-        selected = "selected" if d == selected_dept else ""
-        dropdown_options += f'<option value="{d}">{d} Portal</option>'
+        # Exact string match to ensure the dropdown doesn't reset
+        selected_attr = "selected" if str(d) == str(selected_dept) else ""
+        dropdown_options += f'<option value="{d}" {selected_attr}>{d} Portal</option>'
 
     # Return the secure HTML View
     return f"""
@@ -1166,16 +1176,16 @@ def department_dashboard():
                 .header {{ background: #1a2035; color: white; padding: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }}
                 select {{ padding: 10px; font-size: 16px; border-radius: 5px; cursor: pointer; }}
                 .table-container {{ background: white; padding: 20px; border-radius: 8px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; }}
-                table {{ width: 100%; border-collapse: collapse; text-align: left; }}
-                th, td {{ padding: 12px; border-bottom: 1px solid #ddd; }}
-                th {{ background: #f8f9fa; color: #333; }}
+                table {{ width: 100%; border-collapse: collapse; text-align: left; min-width: 1000px; }}
+                th, td {{ padding: 12px; border-bottom: 1px solid #ddd; vertical-align: top; }}
+                th {{ background: #f8f9fa; color: #333; position: sticky; top: 0; }}
             </style>
         </head>
         <body>
             <div class="header">
                 <div>
                     <h1 style="margin:0;">🔒 Secure Department Portal</h1>
-                    <p style="margin:5px 0 0 0; color: #aaa;">Role-Based Access Control (RBAC) & Dynamic Data Masking Demo</p>
+                    <p style="margin:5px 0 0 0; color: #aaa;">Role-Based Access Control (RBAC) & Dynamic Data Masking</p>
                 </div>
                 <form method="GET" action="/department-dashboard">
                     <select name="dept" onchange="this.form.submit()">
@@ -1193,10 +1203,11 @@ def department_dashboard():
                         <th>PNR Number</th>
                         <th>Train No</th>
                         <th>Travel Date</th>
+                        <th>Station / Location</th>
                         <th>Coach</th>
                         <th>Seat</th>
-                        <th>Complaint Details</th>
-                        <th>Status</th>
+                        <th style="width: 20%;">Complaint Details</th>
+                        <th>Status & Resolution</th>
                     </tr>
                     {table_rows}
                 </table>
