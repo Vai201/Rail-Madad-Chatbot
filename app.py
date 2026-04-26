@@ -294,8 +294,6 @@ def handle_station_search(request_json):
     session_id = request_json['session']
     
     try:
-        # Note: In your original code you queried a table named 'stations'. 
-        # Make sure this table exists in your Cloud SQL! 
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
@@ -315,15 +313,27 @@ def handle_station_search(request_json):
                         "lifespanCount": 1,
                         "parameters": {"station_confirmed": original_station_name}
                     }
-                ]
+                ],
+                # NEW: Added Payload to render Yes/No buttons in React
+                "payload": {
+                    "richContent": [
+                        [
+                            {
+                                "type": "chips",
+                                "options": [
+                                    {"text": "Yes"},
+                                    {"text": "No, let me retype"}
+                                ]
+                            }
+                        ]
+                    ]
+                }
             }
         else:
-            # If not found, tell the user AND kill the context so they aren't stuck in a loop
             return {
                 "fulfillmentText": "Sorry, I couldn't find that station in the database. Please type 'hi' to start over or try another name.",
                 "outputContexts": [
                      {
-                         # Setting lifespanCount to 0 clears the current context memory
                         "name": f"{session_id}/contexts/awaiting-location",
                         "lifespanCount": 0 
                      }
