@@ -306,33 +306,47 @@ def handle_station_search(request_json):
         
         if result:
             original_station_name = result[0]
+            # FIXED: Wrapped Text and Payload inside fulfillmentMessages!
             return {
-                "fulfillmentText": f"Did you mean '{original_station_name}'?",
+                "fulfillmentMessages": [
+                    {
+                        "text": {
+                            "text": [f"Did you mean '{original_station_name}'?"]
+                        }
+                    },
+                    {
+                        "payload": {
+                            "richContent": [
+                                [
+                                    {
+                                        "type": "chips",
+                                        "options": [
+                                            {"text": "Yes"},
+                                            {"text": "No, let me retype"}
+                                        ]
+                                    }
+                                ]
+                            ]
+                        }
+                    }
+                ],
                 "outputContexts": [
                     {
                         "name": f"{session_id}/contexts/awaiting-station-confirmation",
                         "lifespanCount": 1,
                         "parameters": {"station_confirmed": original_station_name}
                     }
-                ],
-                # NEW: Added Payload to render Yes/No buttons in React
-                "payload": {
-                    "richContent": [
-                        [
-                            {
-                                "type": "chips",
-                                "options": [
-                                    {"text": "Yes"},
-                                    {"text": "No, let me retype"}
-                                ]
-                            }
-                        ]
-                    ]
-                }
+                ]
             }
         else:
             return {
-                "fulfillmentText": "Sorry, I couldn't find that station in the database. Please type 'hi' to start over or try another name.",
+                "fulfillmentMessages": [
+                    {
+                        "text": {
+                            "text": ["Sorry, I couldn't find that station in the database. Please type 'hi' to start over or try another name."]
+                        }
+                    }
+                ],
                 "outputContexts": [
                      {
                         "name": f"{session_id}/contexts/awaiting-location",
@@ -343,7 +357,13 @@ def handle_station_search(request_json):
     except Exception as e:
         print(f"Error in station search: {e}")
         return {
-            "fulfillmentText": "Station database error. Please type 'hi' to restart your complaint.",
+            "fulfillmentMessages": [
+                {
+                    "text": {
+                        "text": ["Station database error. Please type 'hi' to restart your complaint."]
+                    }
+                }
+            ],
             "outputContexts": [
                  {
                     "name": f"{session_id}/contexts/awaiting-location",
