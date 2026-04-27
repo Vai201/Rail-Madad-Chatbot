@@ -643,8 +643,19 @@ def get_random_closing_statement(dept):
 def handle_complaint_logging(request_json):
     try:
         parameters = request_json['queryResult']['parameters']
-        complaint_text = parameters.get('complaint_text', '')
+        raw_complaint = parameters.get('complaint_text', '')
         
+        # --- NEW: EXTRACT THE MEDIA URL ---
+        media_url = None
+        # Look for the exact tag React sends: [Evidence: https://...]
+        evidence_match = re.search(r'\[Evidence:\s*(https?://[^\]]+)\]', raw_complaint)
+        if evidence_match:
+            media_url = evidence_match.group(1)
+            # Remove the URL from the text so the dashboard description looks clean
+            complaint_text = re.sub(r'\n?\[Evidence:\s*https?://[^\]]+\]', '', raw_complaint).strip()
+        else:
+            complaint_text = raw_complaint
+
         # 1. Initialize variables and retrieve from Dialogflow Contexts
         pnr = ""
         token = ""
@@ -711,9 +722,9 @@ def handle_complaint_logging(request_json):
         cursor = conn.cursor()
         cursor.execute(
             """INSERT INTO bot_complaints 
-               (phone_number, pnr, token, station, travel_date, complaint_text, department, agency, status, closing_statement) 
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING complaint_id""",
-            (phone_number, pnr_to_store, token, station, travel_date, complaint_text, dept, agency, status, closing_msg)
+               (phone_number, pnr, token, station, travel_date, complaint_text, department, agency, status, closing_statement, media_url) 
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING complaint_id""",
+            (phone_number, pnr_to_store, token, station, travel_date, complaint_text, dept, agency, status, closing_msg, media_url)
         )
         new_id = cursor.fetchone()[0]
         conn.commit()
@@ -1154,10 +1165,10 @@ def department_dashboard():
         "Water Supply", "Security", "Medical Assistance", "General"
     ]
     
-    # 2. FIXED: Added c.station, c.travel_date, and c.closing_statement
+    # 2. FIXED: Added c.station, c.travel_date, c.closing_statement, and c.media_url
     query = """
         SELECT c.complaint_id, c.timestamp, c.phone_number, c.pnr, c.token, 
-               c.complaint_text, c.status, p.train_no, c.travel_date, c.closing_statement, c.station
+               c.complaint_text, c.status, p.train_no, c.travel_date, c.closing_statement, c.station, c.media_url
         FROM bot_complaints c
         LEFT JOIN pnr_records p ON c.pnr = p.pnr_number
         WHERE c.department = %s
@@ -1173,7 +1184,8 @@ def department_dashboard():
         release_db_connection(conn)
         
         for row in records:
-            comp_id, ts, phone, pnr, token, text, status, train_no, travel_date, closing_statement, station = row
+            # Unpack the new media_url column
+            comp_id, ts, phone, pnr, token, text, status, train_no, travel_date, closing_statement, station, media_url = row
             
             # Deterministically mock coach/seat based on PNR hash for the prototype demo
             mock_coach = f"{random.choice(['B','A','S'])}{hash(pnr) % 9 + 1}" if pnr and pnr != "UNRESERVED" and not str(pnr).startswith("REDACTED") else "N/A"
@@ -1196,12 +1208,17 @@ def department_dashboard():
                 display_seat = "🔒 MASKED"
             # ==========================================
             
-            # 3. FIXED: Handle Legacy Data for Train/Date
+            # 3. Handle Legacy Data for Train/Date
             train_display = train_no if train_no else "N/A"
             date_display = travel_date if travel_date else "N/A"
             station_display = station if station else "Not Provided"
             
-            # 4. FIXED: Display Closing Statement cleanly
+            # 4. Create a clickable Evidence button if a URL exists
+            text_display = text
+            if media_url:
+                text_display += f'<br><br><a href="{media_url}" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; background: #f8f9fa; border: 1px solid #dadce0; padding: 4px 8px; border-radius: 4px; color: #1a73e8; text-decoration: none; font-size: 0.85em; font-weight: bold;">📎 View Evidence</a>'
+            
+            # 5. Display Closing Statement cleanly
             status_color = "green" if status == "Closed" else "orange"
             status_html = f'<b style="color:{status_color};">{status}</b>'
             if status == "Closed" and closing_statement:
@@ -1218,14 +1235,14 @@ def department_dashboard():
                 <td style="color: #0f9d58; font-weight: bold;">{station_display}</td>
                 <td style="color: #1a73e8; font-weight: bold;">{display_coach}</td>
                 <td style="color: #1a73e8; font-weight: bold;">{display_seat}</td>
-                <td>{text}</td>
+                <td>{text_display}</td>
                 <td>{status_html}</td>
             </tr>
             """
     except Exception as e:
         table_rows = f"<tr><td colspan='11'>Database Error: {e}</td></tr>"
 
-    # 5. FIXED: Dropdown active state bug
+    # 6. Dropdown active state bug fix
     dropdown_options = ""
     for d in departments:
         # Exact string match to ensure the dropdown doesn't reset
