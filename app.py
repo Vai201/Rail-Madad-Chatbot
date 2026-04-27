@@ -740,7 +740,15 @@ def handle_complaint_logging(request_json):
             emergency_alert = f"🚨 IMMEDIATE ADVICE: {advice_tip} Help is on the way."
             reply_payload["fulfillmentMessages"].append({
                 "text": {"text": [emergency_alert]}
-            })    
+            })
+        # --- NEW: WIPE THE DIALOGFLOW MEMORY CLEAN ---
+        # This kills the active contexts so the bot doesn't think the next message is a station or PNR
+        session_path = request_json.get('session')
+        reply_payload["outputContexts"] = [
+            {"name": f"{session_path}/contexts/awaiting-location", "lifespanCount": 0},
+            {"name": f"{session_path}/contexts/awaiting-station-confirmation", "lifespanCount": 0},
+            {"name": f"{session_path}/contexts/awaiting-complaint-description", "lifespanCount": 0}
+        ]    
         return reply_payload
 
     except Exception as e:
