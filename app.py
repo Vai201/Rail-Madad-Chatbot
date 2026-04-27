@@ -865,14 +865,28 @@ def chat_proxy():
     """Acts as the middleman between the Custom UI and Dialogflow."""
     data = request.get_json()
     
-    user_message = data.get('message')
+    # Safely get the message as a string
+    user_message = data.get('message', '')
     selected_language = data.get('language', 'en')
     session_id = data.get('session_id', 'default-session')
     
     try:
-        # 1. Translate user input INTO English
+        # --- THE FIX: Hide the URL from Google Translate ---
+        media_url_tag = ""
+        # Look for the exact evidence tag React sent
+        evidence_match = re.search(r'\[Evidence:\s*(https?://[^\]]+)\]', user_message)
+        if evidence_match:
+            media_url_tag = evidence_match.group(0) # Grab the entire [Evidence: link] block
+            # Remove it from the user message so Google Translate doesn't ruin it!
+            user_message = user_message.replace(media_url_tag, '').strip()
+
+        # 1. Translate ONLY the user's actual text into English
         english_input = process_translation(user_message, 'en')
         
+        # 1.5 Re-attach the pristine, untouched URL to the English text
+        if media_url_tag:
+            english_input = f"{english_input}\n{media_url_tag}"
+            
         # 2. Send to Dialogflow
         session_client = dialogflow.SessionsClient()
         session = session_client.session_path(DIALOGFLOW_PROJECT_ID, session_id)
