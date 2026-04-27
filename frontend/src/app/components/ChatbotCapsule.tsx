@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Send, Sparkles, Globe, ChevronDown } from "lucide-react";
+import { X, Send, Sparkles, Globe, ChevronDown, Paperclip, Loader2 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 const BACKEND_URL = 'https://rail-madad-chatbot-1094417494880.asia-south1.run.app';
@@ -26,6 +26,13 @@ export function ChatbotCapsule() {
   // Language States
   const [language, setLanguage] = useState("en");
   const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
+
+  // Media Upload States
+  const [allowMediaUpload, setAllowMediaUpload] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
+  const [attachmentName, setAttachmentName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const sessionIdRef = useRef("session-" + Math.random().toString(36).substring(7));
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -77,6 +84,9 @@ export function ChatbotCapsule() {
 
       const data = await response.json();
       
+      // Unlock the upload button ONLY if Dialogflow says it is time!
+      setAllowMediaUpload(data.allow_upload || false);
+      
       setMessages(prev => [...prev, { 
         id: Date.now().toString(), 
         role: 'bot', 
@@ -95,11 +105,61 @@ export function ChatbotCapsule() {
     }
   };
 
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      // 1. Get the "VIP Pass" (Signed URL) from your Flask server
+      const res = await fetch(`${BACKEND_URL}/api/generate-upload-url`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileName: file.name, contentType: file.type })
+      });
+      
+      const { signedUrl, publicUrl } = await res.json();
+
+      // 2. Upload directly from the browser to Google Cloud Storage (Bypasses the 5-sec Dialogflow limit!)
+      await fetch(signedUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file
+      });
+
+      // 3. Save the permanent public URL to attach to the next message
+      setAttachmentUrl(publicUrl);
+      setAttachmentName(file.name);
+    } catch (error) {
+      console.error("Upload failed", error);
+      alert("Failed to upload file. Please try again.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const text = message;
+    if (!message.trim() && !attachmentUrl) return;
+
+    // If they attached a file, secretly append the URL to their text message
+    let finalMessageText = message;
+    if (attachmentUrl) {
+      finalMessageText += `\n[Evidence: ${attachmentUrl}]`;
+    }
+
+    const displayMessage = message || "Sent an attachment \uD83D\uDCCE";
+
+    // Show the clean message in the UI, but send the URL to Dialogflow under the hood
+    setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', text: displayMessage }]);
+    
     setMessage(""); 
-    sendMessageToApi(text); 
+    setAttachmentUrl(null);
+    setAttachmentName(null);
+    setAllowMediaUpload(false); // Hide the button once sent
+    
+    // We send the finalMessageText (which contains the URL) to the API
+    sendMessageToApi(finalMessageText, true); 
   };
 
   return (
@@ -266,19 +326,54 @@ export function ChatbotCapsule() {
               </div>
 
               {/* Input Area */}
-              <form onSubmit={handleSubmit} className="p-3 bg-white border-t border-slate-100">
-                <div className="flex gap-2 relative">
+              <form onSubmit={handleSubmit} className="p-3 bg-white border-t border-slate-100 flex flex-col gap-2">
+                
+                {/* Attachment Preview Bubble */}
+                {attachmentName && (
+                  <div className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg text-xs font-medium w-fit border border-indigo-100">
+                    <Paperclip className="size-3.5" />
+                    <span className="truncate max-w-[200px]">{attachmentName}</span>
+                    <button type="button" onClick={() => { setAttachmentUrl(null); setAttachmentName(null); }} className="hover:text-indigo-900 ml-1">
+                      <X className="size-3" />
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex gap-2 relative items-center">
+                  {/* Hidden File Input */}
+                  <input 
+                    type="file" 
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    accept="image/*,video/*"
+                    className="hidden" 
+                  />
+                  
+                  {/* The Dynamic Upload Button */}
+                  {allowMediaUpload && (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading}
+                      className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition-colors disabled:opacity-50"
+                      title="Attach Photo or Video"
+                    >
+                      {isUploading ? <Loader2 className="size-4 animate-spin" /> : <Paperclip className="size-4" />}
+                    </button>
+                  )}
+
                   <input
                     type="text"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Type your message..."
+                    placeholder={allowMediaUpload ? "Describe issue & attach photo..." : "Type your message..."}
                     className="flex-1 pl-4 pr-12 py-3 rounded-full bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm transition-all shadow-inner"
                   />
+                  
                   <button
                     type="submit"
                     className="absolute right-1 top-1 bottom-1 aspect-square bg-gradient-to-br from-indigo-600 to-blue-600 rounded-full flex items-center justify-center text-white hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={!message.trim() || isLoading}
+                    disabled={(!message.trim() && !attachmentUrl) || isLoading || isUploading}
                   >
                     <Send className="size-4" />
                   </button>

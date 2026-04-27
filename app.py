@@ -915,9 +915,19 @@ def chat_proxy():
             translated_btn_text = process_translation(btn['text'], selected_language)
             translated_buttons.append({"text": translated_btn_text})
 
+        # --- NEW: TELL REACT IF UPLOADS ARE ALLOWED ---
+        allow_upload = False
+        # Safely check if response has output_contexts before looping
+        if hasattr(response, 'query_result') and hasattr(response.query_result, 'output_contexts'):
+            for ctx in response.query_result.output_contexts:
+                if 'awaiting-complaint-description' in ctx.name:
+                    allow_upload = True
+                    break
+
         return jsonify({
             "reply": final_response_text,
-            "buttons": translated_buttons
+            "buttons": translated_buttons,
+            "allow_upload": allow_upload
         })
 
     except Exception as e:
@@ -1304,6 +1314,7 @@ def generate_upload_url():
         # The permanent public link where the file will live after upload
         public_url = f"https://storage.googleapis.com/{EVIDENCE_BUCKET_NAME}/{unique_filename}"
 
+        # RETURN ONLY THE URLs (No chat variables here!)
         return jsonify({
             "signedUrl": signed_url,
             "publicUrl": public_url
