@@ -871,18 +871,25 @@ def chat_proxy():
         if not bot_response_english:
             bot_response_english = "The database is waking up and took a little too long. Could you please send that last message again?"
             
-        # 4. Extract Buttons (Upgraded for Protobuf Unpacking)
+        # 4. Extract Buttons (Crash-Proof Version)
         buttons = []
         for msg in response.query_result.fulfillment_messages:
-            # Check if this specific message contains a custom payload
-            if msg.HasField("payload"):
-                # Convert Google's rigid Protobuf struct into a normal Python dictionary
-                payload_dict = MessageToDict(msg.payload)
-                if 'richContent' in payload_dict:
-                    try:
-                        buttons = payload_dict['richContent'][0][0].get('options', [])
-                    except (IndexError, AttributeError, KeyError):
-                        pass
+            try:
+                # 1. Safely grab the raw protobuf object (bypasses Google's wrapper)
+                raw_proto = msg._pb if hasattr(msg, '_pb') else msg
+                
+                # 2. Convert it safely to a standard Python dictionary
+                from google.protobuf.json_format import MessageToDict
+                msg_dict = MessageToDict(raw_proto)
+                
+                # 3. Dig into the dictionary to find our Yes/No chips
+                if 'payload' in msg_dict and 'richContent' in msg_dict['payload']:
+                    buttons = msg_dict['payload']['richContent'][0][0].get('options', [])
+                    
+            except Exception as e:
+                # If extraction fails, log it but DO NOT crash the chat!
+                print(f"Safely bypassed button extraction error: {e}")
+                pass
         # --------------------------------------------------
 
         # 3. Translate the main text out to the user's language
