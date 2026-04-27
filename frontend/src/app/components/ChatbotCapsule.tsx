@@ -87,12 +87,17 @@ export function ChatbotCapsule() {
       // Unlock the upload button ONLY if Dialogflow says it is time!
       setAllowMediaUpload(data.allow_upload || false);
       
-      setMessages(prev => [...prev, { 
-        id: Date.now().toString(), 
-        role: 'bot', 
-        text: data.reply,
-        buttons: data.buttons 
-      }]);
+      // Split the text by the <br><br> tags so each part becomes its own chat bubble!
+      const repliesArray = (data.reply || "").split('<br><br>');
+      const newMessages = repliesArray.map((replyText: string, index: number) => ({
+        id: Date.now().toString() + "-" + index,
+        role: 'bot' as const,
+        text: replyText,
+        // Only attach the buttons to the very LAST chat bubble
+        buttons: index === repliesArray.length - 1 ? data.buttons : undefined
+      }));
+
+      setMessages(prev => [...prev, ...newMessages]);
     } catch (error) {
       console.error("Chat error:", error);
       setMessages(prev => [...prev, { 
@@ -279,10 +284,12 @@ export function ChatbotCapsule() {
                       )}
                       
                       <div className={`max-w-[85%] flex flex-col gap-1.5 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                        <div className={`px-4 py-2.5 text-sm shadow-sm leading-relaxed ${
+                        <div className={`px-4 py-2.5 text-sm shadow-sm leading-relaxed rounded-2xl ${
                           msg.role === 'user' 
-                            ? 'bg-gradient-to-br from-indigo-600 to-blue-600 text-white rounded-2xl rounded-tr-sm border border-indigo-700' 
-                            : 'bg-white text-slate-800 rounded-2xl rounded-tl-sm border border-slate-200'
+                            ? 'bg-gradient-to-br from-indigo-600 to-blue-600 text-white rounded-tr-sm border border-indigo-700' 
+                            : msg.text.includes('🚨') 
+                              ? 'bg-rose-50 text-rose-900 rounded-tl-sm border border-rose-200 shadow-rose-100' // The soft red tint!
+                              : 'bg-white text-slate-800 rounded-tl-sm border border-slate-200'
                         }`}>
                           {msg.text}
                         </div>
