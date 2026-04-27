@@ -12,6 +12,7 @@ import json
 import google.generativeai as genai
 from google.cloud import translate_v2 as translate
 from google.cloud import dialogflow_v2 as dialogflow
+from google.protobuf.json_format import MessageToDict
 
 # 2. LOAD ENV FIRST
 load_dotenv() 
@@ -850,14 +851,18 @@ def chat_proxy():
         if not bot_response_english:
             bot_response_english = "The database is waking up and took a little too long. Could you please send that last message again?"
             
-        # 4. Extract Buttons
+        # 4. Extract Buttons (Upgraded for Protobuf Unpacking)
         buttons = []
         for msg in response.query_result.fulfillment_messages:
-            if msg.payload and 'richContent' in msg.payload:
-                try:
-                    buttons = msg.payload['richContent'][0][0].get('options', [])
-                except (IndexError, AttributeError):
-                    pass
+            # Check if this specific message contains a custom payload
+            if msg.HasField("payload"):
+                # Convert Google's rigid Protobuf struct into a normal Python dictionary
+                payload_dict = MessageToDict(msg.payload)
+                if 'richContent' in payload_dict:
+                    try:
+                        buttons = payload_dict['richContent'][0][0].get('options', [])
+                    except (IndexError, AttributeError, KeyError):
+                        pass
         # --------------------------------------------------
 
         # 3. Translate the main text out to the user's language
