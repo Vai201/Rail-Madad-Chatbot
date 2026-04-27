@@ -54,8 +54,8 @@ translate_client = translate.Client()
 
 # 👇 UPDATE THIS TO THE CORRECT BOT PROJECT ID 👇
 DIALOGFLOW_PROJECT_ID = "automation-of-rail-madad"
-# --- UTILITY FUNCTIONS ---
 
+# --- UTILITY FUNCTIONS ---
 def process_translation(text, target_language):
     if target_language == 'en':
         return text
@@ -67,18 +67,11 @@ def process_translation(text, target_language):
         return text
 
 def process_passenger_query(phone_number, user_query):
-    """
-    Handles daily rate limits, applies guardrails, fetches AI response, 
-    and logs the query in PostgreSQL.
-    """
-    # 1. Use your existing connection helper
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        # ==========================================
-        # A. RATE LIMIT CHECK (Max 4 per day)
-        # ==========================================
+        # A. RATE LIMIT CHECK
         cursor.execute("""
             SELECT COUNT(*) FROM passenger_queries 
             WHERE phone_number = %s AND DATE(created_at) = CURRENT_DATE;
@@ -87,12 +80,9 @@ def process_passenger_query(phone_number, user_query):
         query_count = cursor.fetchone()[0]
 
         if query_count >= 4:
-            # Block the request and save API credits
             return "You have reached the daily limit of 4 queries for this contact number. Please try again tomorrow or select 'Register a Complaint' to file a complain."
 
-        # ==========================================
         # B. THE GUARDRAIL PROMPT
-        # ==========================================
         strict_prompt = f"""
         System Context: You are "RailBot", the official AI assistant for Indian Railways. 
         Your ONLY job is to answer queries related to Indian Railways, stations, trains, PNR rules, and travel guidelines. 
@@ -107,26 +97,18 @@ def process_passenger_query(phone_number, user_query):
         User's Query: "{user_query}"
         """
 
-        # ==========================================
-        # C. CALL GEMINI (Upgraded for Factual Accuracy)
-        # ==========================================
-        # Using Gemini 3.1 Flash-Lite for high-speed, cost-effective factual recall
+        # C. CALL GEMINI
         model = genai.GenerativeModel('gemini-3.1-flash-lite-preview') 
         response = model.generate_content(strict_prompt)
         ai_response_text = response.text
 
-        # ==========================================
         # D. LOG THE SUCCESSFUL QUERY IN DATABASE
-        # ==========================================
         cursor.execute("""
             INSERT INTO passenger_queries (phone_number, user_query, ai_response) 
             VALUES (%s, %s, %s);
         """, (phone_number, user_query, ai_response_text))
-        
-        # Commit the transaction
         conn.commit()
 
-        # Return the AI's clean response back to the user
         return ai_response_text
 
     except Exception as e:
@@ -135,33 +117,23 @@ def process_passenger_query(phone_number, user_query):
         return "I am currently experiencing high network traffic. Please try your query again in a few moments."
 
     finally:
-        # Safely release the connection using your existing helper
         cursor.close()
         release_db_connection(conn)
 
 # --- 1. Define Paths & Cloud DB Credentials ---
-# --- 1. Define Paths & Cloud DB Credentials ---
-# We removed os.pardir so it stays inside the rail_madad_chatbot folder
 project_root = os.path.abspath(os.path.dirname(__file__))
 
 pnr_file_path = os.path.join(project_root, 'data', 'pnr_database.csv')
 stations_file_path = os.path.join(project_root, 'data', 'stations_original.csv')
 
-# 👇 ADD YOUR GOOGLE CLOUD SQL DETAILS HERE 👇
-
-
-print(f"Looking for PNR data at: {pnr_file_path}")
-print(f"Looking for Station data at: {stations_file_path}")
 print(f"Connecting to Cloud SQL at: {DB_HOST}")
 
-# --- 2. RUN DATABASE SETUP ---
 # --- 2. RUN DATABASE SETUP ---
 def setup_database():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # 1. NEW Query Table with Rate Limiting Support
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS passenger_queries (
             query_id SERIAL PRIMARY KEY,
@@ -172,7 +144,6 @@ def setup_database():
         );
         ''')
         
-        # 2. Existing Complaints Table
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS bot_complaints (
             complaint_id SERIAL PRIMARY KEY,
@@ -186,11 +157,11 @@ def setup_database():
             agency TEXT,
             status TEXT DEFAULT 'Open',
             closing_statement TEXT,
+            media_url TEXT,
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         ''')
         
-        # 3. PNR Table
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS pnr_records (
             pnr_number TEXT PRIMARY KEY,
@@ -210,8 +181,6 @@ def cleanup_old_complaints():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # SQL query to delete rows older than 6 months that are 'Closed'
-        # AND are NOT part of the Medical or RPF departments
         cleanup_query = '''
             DELETE FROM bot_complaints 
             WHERE status = 'Closed' 
@@ -220,7 +189,7 @@ def cleanup_old_complaints():
         '''
         
         cursor.execute(cleanup_query)
-        deleted_count = cursor.rowcount # Check how many rows were actually deleted
+        deleted_count = cursor.rowcount 
         
         conn.commit()
         release_db_connection(conn)
@@ -230,15 +199,8 @@ def cleanup_old_complaints():
             
     except Exception as e:
         print(f"❌ ERROR during automated database cleanup: {e}")
+
 # --- 3. Load Data at Startup ---
-'''try:
-    pnr_data = pd.read_csv(pnr_file_path, index_col='PNR') 
-    print("✅ PNR dataset loaded successfully.")
-except Exception as e:
-    print(f"❌ ERROR loading PNR data: {e}")
-    pnr_data = None'''
-# --- 3. Load Data at Startup ---
-# We no longer load CSVs locally because we migrated to Cloud SQL!
 pnr_data = None 
 station_data_raw = None
 station_data_processed = None
@@ -252,21 +214,8 @@ try:
     print("✅ Station dataset loaded successfully.")
 except Exception as e:
     print(f"❌ ERROR loading Station data: {e}")
-    station_data_raw = None
-    station_data_processed = None
 
 # --- 4. Helper Functions for Chatbot ---
-'''def handle_query_intent(request_json):
-    user_query_text = request_json['queryResult']['parameters']['user_query']
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO bot_queries (query_text) VALUES (%s) RETURNING query_id", (user_query_text,))
-    new_query_id = cursor.fetchone()[0]
-    conn.commit()
-    release_db_connection(conn)
-    response_text = f"Thank you. Your query has been registered with ID: Q-{new_query_id}."
-    return {"fulfillmentText": response_text}'''
-
 def handle_phone_number(request_json):
     raw_input = request_json['queryResult'].get('queryText', '')
     digits = re.findall(r'\d', raw_input)
@@ -315,7 +264,6 @@ def handle_station_search(request_json):
         
         if result:
             original_station_name = result[0]
-            # FIXED: Wrapped Text and Payload inside fulfillmentMessages!
             return {
                 "fulfillmentMessages": [
                     {
@@ -407,7 +355,6 @@ def handle_station_confirmed(request_json):
 def handle_pnr_verification(request_json):
     params = request_json.get('queryResult', {}).get('parameters', {})
     
-    # Extract parameter safely
     pnr_input = params.get('pnr_number') or params.get('number') or params.get('any') or ''
     pnr_input_str = str(pnr_input)
     
@@ -416,11 +363,9 @@ def handle_pnr_verification(request_json):
         
     pnr_digits = "".join(re.findall(r'\d', pnr_input_str))
     
-    # Put back leading zeros if Dialogflow stripped them (e.g., "0000008788" -> "8788")
     if 0 < len(pnr_digits) < 10:
         pnr_digits = pnr_digits.zfill(10)
     
-    # STRICT PRODUCTION RULE: Must be exactly 10 digits
     if len(pnr_digits) != 10:
         return {"fulfillmentText": f"Please provide a valid 10-digit PNR. I received {len(pnr_digits)} digits."}
     
@@ -430,16 +375,13 @@ def handle_pnr_verification(request_json):
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Query the database
         cursor.execute("SELECT train_no, date_of_travel FROM pnr_records WHERE pnr_number = %s", (db_pnr_format,))
         result = cursor.fetchone()
         release_db_connection(conn)
 
-        # STRICT PRODUCTION RULE: Must exist in the database
         if result:
             train_no, travel_date = result
             
-            # Generate Secure Token
             pnr_list = list(pnr_digits)
             import random
             random.shuffle(pnr_list)
@@ -463,7 +405,6 @@ def handle_pnr_verification(request_json):
                 ]
             }
         else:
-            # Rejects the user if the PNR is fake or missing
             return {"fulfillmentText": f"PNR {pnr_digits} not found in the official system. Please check your ticket and try again."}
             
     except Exception as e:
@@ -471,12 +412,9 @@ def handle_pnr_verification(request_json):
         return {"fulfillmentText": "We are experiencing a database connection issue. Please type 'hi' to restart."}
 
 def syntax_router(text):
-    """The fast, 0ms keyword matcher using strict whole-word boundaries."""
     import re
     text = text.lower()
     
-    # Using \b (Word Boundary) ensures we match the exact word, not substrings.
-    # Example: \bac\b matches "the ac is broken" but ignores "stomach".
     mapping = {
         "Sanitation & Cleaning": [r'\bdirty\b', r'\btoilet\b', r'\bwashroom\b', r'\bcleaning\b', r'\bfilthy\b', r'\bstink\b', r'\bgarbage\b'],
         "Catering & Food": [r'\bfood\b', r'\bpantry\b', r'\bovercharged\b', r'\bmeal\b', r'\bcatering\b', r'\bbad food\b', r'\bwater bottle\b'],
@@ -494,10 +432,6 @@ def syntax_router(text):
     return None 
 
 def categorize_complaint(complaint_text):
-    """Hybrid Enterprise Routing: Emergency Check -> Syntax -> Neural AI Fallback."""
-    
-    # RULE 1: The Emergency Intercept
-    # If the text contains severe words, skip syntax and force it to the AI for tactical advice
     emergency_keywords = ['police', 'stolen', 'harass', 'doctor', 'faint', 'sick', 'blood', 'emergency', 'fight', 'creepy', 'pain', 'pregnant', 'attack']
     is_emergency = any(word in complaint_text.lower() for word in emergency_keywords)
     
@@ -505,14 +439,10 @@ def categorize_complaint(complaint_text):
         dept, advice = neural_router(complaint_text)
         if dept: return dept, advice
     
-    # RULE 2: The Fast Track (0ms)
-    # Not an emergency? Let the strict regex syntax router handle it to save AI quota
     syntax_dept = syntax_router(complaint_text)
     if syntax_dept:
         return syntax_dept, "" 
         
-    # RULE 3: The Smart Fallback
-    # If it's a weird, misspelled, or complex sentence the regex missed, let Gemma figure it out
     dept, advice = neural_router(complaint_text)
     if dept:
         return dept, advice
@@ -520,7 +450,6 @@ def categorize_complaint(complaint_text):
     return "General", ""
 
 def neural_router(complaint_text):
-    """Fully dynamic LLM router for complex cases, emergencies, and safety tips."""
     import json
     import re
     
@@ -529,8 +458,6 @@ def neural_router(complaint_text):
         "Maintenance & Electrical", "General" 
     ]
     
-    # ADDED: Anti-overfitting instructions to force dynamic, unique advice
-    # THE FIX: Added Rule #4 to make the AI aware of the PNR data
     prompt = f"""You are a backend routing API for Indian Railways. You receive a complaint and output ONLY raw JSON. 
     Complaint: "{complaint_text}"
     Valid Departments: {', '.join(valid_departments)}
@@ -548,7 +475,6 @@ def neural_router(complaint_text):
     """
     
     try:
-        # THE FIX: Gemma 3 27B (14,400 RPD Quota)
         model = genai.GenerativeModel('models/gemma-3-27b-it')
         
         safety_settings = [
@@ -558,13 +484,10 @@ def neural_router(complaint_text):
             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"}
         ]
         
-        # THE FIX: Removed the JSON mime-type so Gemma stops throwing 500 errors
         response = model.generate_content(
             prompt, 
             safety_settings=safety_settings,
-            generation_config={
-                "max_output_tokens": 300 
-            }
+            generation_config={"max_output_tokens": 300}
         )
         
         if not response.text:
@@ -573,7 +496,6 @@ def neural_router(complaint_text):
         raw_response = response.text.strip()
         print(f"DEBUG GEMINI RAW: {raw_response}") 
         
-        # Our Regex hunter will perfectly extract the JSON from the raw text
         match = re.search(r'\{.*\}', raw_response, re.DOTALL)
         
         if match:
@@ -596,7 +518,6 @@ def neural_router(complaint_text):
 
 def get_agency_name(pnr_str):
     try:
-        # Extract numeric part of PNR (e.g., PNR0000001234 -> 1234)
         pnr_num = int(re.search(r'\d+', pnr_str).group())
         if pnr_num <= 5000: agency = "M/s Ambuj Hotel Pvt. Ltd"
         elif pnr_num <= 10000: agency = "M/s. R.K.Associates & Hoteliers Pvt.Ltd"
@@ -637,7 +558,6 @@ def get_random_closing_statement(dept):
         "General": ["The complaint will be attended by our support team shortly."],
         "Default": ["The issue has been resolved and verified."]
     }
-    # Fallback for departments not explicitly listed
     if dept in ["Water Supply", "Maintenance & Electrical"]:
         return random.choice(statements["Sanitation & Cleaning"])
     
@@ -645,27 +565,21 @@ def get_random_closing_statement(dept):
 
 def handle_complaint_logging(request_json):
     try:
-        # Retrieve the session string from Dialogflow
         session_path = request_json.get('session', '')
         
-        # --- RETRIEVE FROM GHOST STORAGE ---
         media_url = None
-        # Check if we have a URL saved in memory for this exact user session
         for stored_session_id in list(ghost_media_storage.keys()):
             if stored_session_id in session_path:
                 media_url = ghost_media_storage[stored_session_id]
-                # Delete it from memory immediately to keep the server clean
                 del ghost_media_storage[stored_session_id]
                 break
                 
         parameters = request_json['queryResult'].get('parameters', {})
         complaint_text = parameters.get('complaint_text', '')
         
-        # Fallback if Dialogflow didn't capture the text properly
         if not complaint_text:
             complaint_text = request_json['queryResult'].get('queryText', '')
 
-        # 1. Initialize variables and retrieve from Dialogflow Contexts
         pnr = ""
         token = ""
         station = ""
@@ -676,11 +590,9 @@ def handle_complaint_logging(request_json):
         for c in contexts:
             params = c.get('parameters', {})
             
-            # Priority 1: Grab phone number wherever it appears in memory
             if not phone_number:
                 phone_number = params.get('phone_number', '')
             
-            # Priority 2: Grab specific complaint details
             if 'awaiting-complaint-description' in c.get('name', ''):
                 pnr = params.get('pnr', pnr) 
                 token = params.get('complaint_token', token)
@@ -688,17 +600,13 @@ def handle_complaint_logging(request_json):
                 if not travel_date:
                     travel_date = params.get('travel_date', '')
 
-        # 2. Identify Department (Categorization)
         dept, advice_tip = categorize_complaint(complaint_text)
         
-        # 3. Agency Assignment Logic
-        # OVERRIDE: Emergencies go to official forces, not private contractors
         if dept == "Medical Assistance":
             agency = "Indian Railway Medical Service (IRMS)"
         elif dept == "Security":
             agency = "The Railway Protection Force (RPF)"
         else:
-            # For standard complaints, assign private contractors based on PNR
             agency = "Internal Staff"
             if pnr:
                 try:
@@ -711,22 +619,13 @@ def handle_complaint_logging(request_json):
                         elif pnr_num <= 20000: agency = "M/s A.S Sales Corporation"
                         elif pnr_num <= 25000: agency = "M/s. Rathour Services"
                         else: agency = "M/s. A. A. Catg. Co"
-                    else:
-                        print(f"Invalid PNR length detected: {pnr}")
                 except Exception as e:
                     print(f"Agency assignment error: {e}")
 
-        # 4. PRIVACY LOGIC: Full Data vs. Redacted
-        # 4. PRIVACY LOGIC: Moved to View Layer (RBAC)
-        # We now store the REAL PNR in the database as the "Single Source of Truth".
-        # Dynamic Data Masking will happen in the /hod-dashboard route.
         pnr_to_store = pnr if pnr else "UNRESERVED"
-
-        # 5. ALL Complaints start as 'Open' (No instant closing)
         status = "Open"
         closing_msg = "" 
 
-        # 6. Save to Cloud Database
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
@@ -739,10 +638,8 @@ def handle_complaint_logging(request_json):
         conn.commit()
         release_db_connection(conn)
 
-        # 7. Final Response to User (Using Multi-Bubble Logic)
         base_msg = f"Complaint registered (ID: C-{new_id}) routed to {dept} ({agency})."
         
-        # Format the response as a list of messages for separate chat bubbles
         reply_payload = {
             "fulfillmentMessages": [
                 {
@@ -753,7 +650,6 @@ def handle_complaint_logging(request_json):
             ]
         }
         
-        # If it is an emergency, add a SECOND text bubble to the chat
         if dept in ["Security", "Medical Assistance"]:
             emergency_alert = f"🚨 EMERGENCY ACTION: On-duty {dept} personnel have been alerted and are being dispatched to your location instantly."
             reply_payload["fulfillmentMessages"].append({
@@ -761,14 +657,12 @@ def handle_complaint_logging(request_json):
                     "text": [emergency_alert]
                 }
             })
-        # If Gemini generated an emergency tip, display it as an extra chat bubble!
         if advice_tip:
             emergency_alert = f"🚨 IMMEDIATE ADVICE: {advice_tip} Help is on the way."
             reply_payload["fulfillmentMessages"].append({
                 "text": {"text": [emergency_alert]}
             })
-        # --- NEW: WIPE THE DIALOGFLOW MEMORY CLEAN ---
-        # This kills the active contexts so the bot doesn't think the next message is a station or PNR
+            
         session_path = request_json.get('session')
         reply_payload["outputContexts"] = [
             {"name": f"{session_path}/contexts/awaiting-location", "lifespanCount": 0},
@@ -785,36 +679,26 @@ def handle_complaint_logging(request_json):
 @app.route('/webhook', methods=['POST'])
 def webhook():
     req = request.get_json(silent=True)
-    
-    # Get the name of the intent from Dialogflow
     intent_name = req.get('queryResult', {}).get('intent', {}).get('displayName')
 
-    # --- 1. Complaint Flow Intents ---
     if intent_name == 'provide_phone_number':
         return jsonify(handle_phone_number(req))
-        
     elif intent_name == 'provide_station_name':
         return jsonify(handle_station_search(req))
-        
     elif intent_name == 'user_confirms_station_yes':
         return jsonify(handle_station_confirmed(req))
-        
     elif intent_name == 'provide_pnr':
         return jsonify(handle_pnr_verification(req))
-        
     elif intent_name == 'capture_complaint_description':
         return jsonify(handle_complaint_logging(req))
 
-    # --- 2. NEW: Query Flow Intent (Gemma 3) ---
     elif intent_name == 'Handle_General_Query':
         parameters = req.get('queryResult', {}).get('parameters', {})
         phone = parameters.get('phone_number')
         query_text = parameters.get('user_query')
         
-        # Run our secure, rate-limited Gemma 3 function
         final_response = process_passenger_query(phone, query_text)
         
-        # Send the AI response AND the follow-up buttons back to the user
         return jsonify({
             "fulfillmentMessages": [
                 {"text": {"text": [final_response]}},
@@ -834,7 +718,6 @@ def webhook():
             ]
         })
 
-    # --- 3. Restart/Closing Logic ---
     elif intent_name == 'user_says_thanks':
         session_id = req.get('session')
         return jsonify({
@@ -866,29 +749,21 @@ def webhook():
 
 @app.route('/chat_proxy', methods=['POST'])
 def chat_proxy():
-    """Acts as the middleman between the Custom UI and Dialogflow."""
     data = request.get_json()
     
-    # Safely get the message as a string
     user_message = data.get('message', '')
     selected_language = data.get('language', 'en')
     session_id = data.get('session_id', 'default-session')
     
     try:
-        # --- THE INVISIBLE SMUGGLER PROTOCOL ---
-        # 1. Look for the URL inside the incoming message
         url_match = re.search(r'(https?://[^\s\]]+)', user_message)
         if url_match:
-            # 2. Store it in Flask's temporary memory, locked to this specific user's session
             ghost_media_storage[session_id] = url_match.group(1)
             
-        # 3. Completely erase the URL from the text so Dialogflow never sees it
         user_message = re.sub(r'\n?\[Evidence:\s*https?://[^\]]+\]', '', user_message).strip()
 
-        # 4. Translate ONLY the pure text into English
         english_input = process_translation(user_message, 'en')
         
-        # 5. Send pure text to Dialogflow
         session_client = dialogflow.SessionsClient()
         session = session_client.session_path(DIALOGFLOW_PROJECT_ID, session_id)
         text_input = dialogflow.TextInput(text=english_input, language_code="en")
@@ -898,57 +773,38 @@ def chat_proxy():
             request={"session": session, "query_input": query_input}
         )
         
-       # --- NEW LOGIC: MULTI-BUBBLE TEXT EXTRACTION ---
         bot_responses = []
-        
-        # 1. Collect ALL text bubbles Dialogflow sent back
         for msg in response.query_result.fulfillment_messages:
             if msg.text and msg.text.text:
                 bot_responses.append(msg.text.text[0])
                 
-        # 2. Join them with HTML line breaks so they look clean in the UI
         if bot_responses:
             bot_response_english = "<br><br>".join(bot_responses)
         else:
             bot_response_english = response.query_result.fulfillment_text
         
-        # 3. The Timeout Safety Net
         if not bot_response_english:
             bot_response_english = "The database is waking up and took a little too long. Could you please send that last message again?"
             
-        # 4. Extract Buttons (Crash-Proof Version)
         buttons = []
         for msg in response.query_result.fulfillment_messages:
             try:
-                # 1. Safely grab the raw protobuf object (bypasses Google's wrapper)
                 raw_proto = msg._pb if hasattr(msg, '_pb') else msg
-                
-                # 2. Convert it safely to a standard Python dictionary
                 from google.protobuf.json_format import MessageToDict
                 msg_dict = MessageToDict(raw_proto)
-                
-                # 3. Dig into the dictionary to find our Yes/No chips
                 if 'payload' in msg_dict and 'richContent' in msg_dict['payload']:
                     buttons = msg_dict['payload']['richContent'][0][0].get('options', [])
-                    
             except Exception as e:
-                # If extraction fails, log it but DO NOT crash the chat!
-                print(f"Safely bypassed button extraction error: {e}")
                 pass
-        # --------------------------------------------------
 
-        # 3. Translate the main text out to the user's language
         final_response_text = process_translation(bot_response_english, selected_language)
         
-        # 4. Translate each button's text as well!
         translated_buttons = []
         for btn in buttons:
             translated_btn_text = process_translation(btn['text'], selected_language)
             translated_buttons.append({"text": translated_btn_text})
 
-        # --- NEW: TELL REACT IF UPLOADS ARE ALLOWED ---
         allow_upload = False
-        # Safely check if response has output_contexts before looping
         if hasattr(response, 'query_result') and hasattr(response.query_result, 'output_contexts'):
             for ctx in response.query_result.output_contexts:
                 if 'awaiting-complaint-description' in ctx.name:
@@ -978,8 +834,6 @@ def track_by_phone():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # --- NEW LOGIC: AUTO-CLOSE STALE COMPLAINTS ---
-        # 1. Find Open complaints older than 1 minute for this user
         cursor.execute("""
             SELECT complaint_id, department FROM bot_complaints 
             WHERE phone_number = %s AND status = 'Open' 
@@ -987,7 +841,6 @@ def track_by_phone():
         """, (phone_number,))
         stale_complaints = cursor.fetchall()
         
-        # 2. Update them with random closing statements
         for row in stale_complaints:
             comp_id = row[0]
             dept = row[1]
@@ -1000,10 +853,8 @@ def track_by_phone():
             """, (closing_statement, comp_id))
         
         if stale_complaints:
-            conn.commit() # Save the auto-closes to the database
-        # ----------------------------------------------
-        
-        # Now fetch the (potentially updated) records to show the user
+            conn.commit() 
+            
         cursor.execute(
             "SELECT complaint_id, department, status, timestamp, complaint_text, closing_statement FROM bot_complaints WHERE phone_number = %s ORDER BY timestamp DESC",
             (phone_number,)
@@ -1016,16 +867,14 @@ def track_by_phone():
 
         complaints_list = []
         for row in records:
-            # We now grab the closing statement (row[5]) if it exists
             resolution_text = row[5] if row[5] else ""
-            
             complaints_list.append({
                 "id": f"C-{row[0]}",
                 "department": row[1],
                 "status": row[2],
                 "date": row[3].strftime("%Y-%m-%d %H:%M"),
                 "description": row[4],
-                "resolution": resolution_text # Send the closing statement to the frontend
+                "resolution": resolution_text 
             })
 
         return jsonify({"message": "Success", "complaints": complaints_list})
@@ -1036,12 +885,10 @@ def track_by_phone():
 
 @app.route('/api/cron/auto-close', methods=['GET', 'POST'])
 def cron_auto_close():
-    """Background task to automatically close stale complaints after 2 minutes."""
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Find all open complaints older than 2 minutes (Background Automation)
         cursor.execute("""
             SELECT complaint_id, department FROM bot_complaints 
             WHERE status = 'Open' 
@@ -1098,21 +945,12 @@ def get_page_template(title, table_html):
             <style>
                 body {{ font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; }}
                 h1 {{ color: #333; }}
-                
-                /* This container makes the table scrollable side-to-side */
                 .table-container {{ overflow-x: auto; width: 100%; border: 1px solid #ddd; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }}
-                
-                /* The table itself */
                 .table {{ width: 100%; border-collapse: collapse; margin-top: 0; white-space: nowrap; }}
                 .table th, .table td {{ padding: 12px 16px; text-align: left; border-bottom: 1px solid #ddd; }}
-                
-                /* Blue sticky header so it stays visible when scrolling down */
                 .table th {{ background-color: #1a73e8; color: white; position: sticky; top: 0; z-index: 10; }}
-                
-                /* Alternating row colors for readability */
                 .table tr:nth-child(even) {{ background-color: #f8f9fa; }}
                 .table tr:hover {{ background-color: #f1f1f1; }}
-                
                 a {{ font-size: 1.2em; color: #1a73e8; text-decoration: none; display: inline-block; margin-bottom: 15px; }}
                 a:hover {{ text-decoration: underline; }}
             </style>
@@ -1120,11 +958,9 @@ def get_page_template(title, table_html):
         <body>
             <h1>{title}</h1>
             <p><a href="/admin">⬅ Back to Admin Dashboard</a></p>
-            
             <div class="table-container">
                 {table_html}
             </div>
-            
         </body>
     </html>
     """
@@ -1156,36 +992,26 @@ def view_complaints():
 
 @app.route('/view-pnrs')
 def view_pnrs():
-    # Fetch data directly from the SQL table
     query = "SELECT * FROM pnr_records LIMIT 100"
     table_html = get_db_as_html_table(query)
-    
-    # If the table is empty, show a helpful message
     if "No complaints found" in table_html or "error" in table_html.lower():
         table_html = "<p>No PNR records found. Please import your CSV into the 'pnr_records' table in Cloud SQL.</p>"
-        
     return get_page_template("PNR Database (SQL Cloud Storage)", table_html)
 
 @app.route('/view-stations')
 def view_stations():
-    # This now asks the SQL database instead of looking for a CSV file
     query = "SELECT * FROM stations LIMIT 100" 
     table_html = get_db_as_html_table(query)
     return get_page_template("Station Database (First 100 Rows)", table_html)
 
 @app.route('/department-dashboard')
 def department_dashboard():
-    # Default to Catering if no department is selected
     selected_dept = request.args.get('dept', 'Catering & Food')
-    
-    # 1. FIXED: All departments from syntax_router included
     departments = [
         "Sanitation & Cleaning", "Catering & Food", "Maintenance & Electrical", 
         "Ticketing & Refunds", "Luggage & Parcels", "Staff Behavior", 
         "Water Supply", "Security", "Medical Assistance", "General"
     ]
-    
-    # 2. FIXED: Added c.station, c.travel_date, c.closing_statement, and c.media_url
     query = """
         SELECT c.complaint_id, c.timestamp, c.phone_number, c.pnr, c.token, 
                c.complaint_text, c.status, p.train_no, c.travel_date, c.closing_statement, c.station, c.media_url
@@ -1194,7 +1020,6 @@ def department_dashboard():
         WHERE c.department = %s
         ORDER BY c.timestamp DESC
     """
-    
     table_rows = ""
     try:
         conn = get_db_connection()
@@ -1204,41 +1029,30 @@ def department_dashboard():
         release_db_connection(conn)
         
         for row in records:
-            # Unpack the new media_url column
             comp_id, ts, phone, pnr, token, text, status, train_no, travel_date, closing_statement, station, media_url = row
             
-            # Deterministically mock coach/seat based on PNR hash for the prototype demo
             mock_coach = f"{random.choice(['B','A','S'])}{hash(pnr) % 9 + 1}" if pnr and pnr != "UNRESERVED" and not str(pnr).startswith("REDACTED") else "N/A"
             mock_seat = str(hash(pnr) % 72 + 1) if pnr and pnr != "UNRESERVED" and not str(pnr).startswith("REDACTED") else "N/A"
             
-            # ==========================================
-            # RBAC DYNAMIC DATA MASKING ENGINE
-            # ==========================================
             if selected_dept in ["Security", "Medical Assistance"]:
-                # High Privilege Department: Full Access
                 display_phone = phone
                 display_pnr = pnr
                 display_coach = mock_coach
                 display_seat = mock_seat
             else:
-                # Low Privilege Department: Redacted Access
                 display_phone = f"******{phone[-4:]}" if phone and len(phone) >= 4 else "REDACTED"
                 display_pnr = f"REDACTED (TK-{token[-4:]})" if token else "REDACTED"
                 display_coach = "🔒 MASKED"
                 display_seat = "🔒 MASKED"
-            # ==========================================
             
-            # 3. Handle Legacy Data for Train/Date
             train_display = train_no if train_no else "N/A"
             date_display = travel_date if travel_date else "N/A"
             station_display = station if station else "Not Provided"
             
-            # 4. Create a clickable Evidence button if a URL exists
             text_display = text
             if media_url:
                 text_display += f'<br><br><a href="{media_url}" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; background: #f8f9fa; border: 1px solid #dadce0; padding: 4px 8px; border-radius: 4px; color: #1a73e8; text-decoration: none; font-size: 0.85em; font-weight: bold;">📎 View Evidence</a>'
             
-            # 5. Display Closing Statement cleanly
             status_color = "green" if status == "Closed" else "orange"
             status_html = f'<b style="color:{status_color};">{status}</b>'
             if status == "Closed" and closing_statement:
@@ -1262,14 +1076,11 @@ def department_dashboard():
     except Exception as e:
         table_rows = f"<tr><td colspan='11'>Database Error: {e}</td></tr>"
 
-    # 6. Dropdown active state bug fix
     dropdown_options = ""
     for d in departments:
-        # Exact string match to ensure the dropdown doesn't reset
         selected_attr = "selected" if str(d) == str(selected_dept) else ""
         dropdown_options += f'<option value="{d}" {selected_attr}>{d} Portal</option>'
 
-    # Return the secure HTML View
     return f"""
     <html>
         <head>
@@ -1323,7 +1134,6 @@ def department_dashboard():
 
 @app.route('/api/generate-upload-url', methods=['POST'])
 def generate_upload_url():
-    """Generates a secure Signed URL so React can upload directly to GCP."""
     try:
         data = request.get_json()
         file_name = data.get('fileName')
@@ -1332,15 +1142,11 @@ def generate_upload_url():
         if not file_name or not content_type:
             return jsonify({"error": "Missing fileName or contentType"}), 400
 
-        # Generate a unique file name to prevent users from overwriting each other's files
         unique_filename = f"{uuid.uuid4().hex}_{file_name}"
-
-        # Initialize the GCS client (It automatically uses your Cloud Run credentials!)
         storage_client = storage.Client()
         bucket = storage_client.bucket(EVIDENCE_BUCKET_NAME)
         blob = bucket.blob(unique_filename)
 
-        # Generate the VIP Pass (Signed URL) valid for 15 minutes
         signed_url = blob.generate_signed_url(
             version="v4",
             expiration=datetime.timedelta(minutes=15),
@@ -1348,10 +1154,8 @@ def generate_upload_url():
             content_type=content_type
         )
 
-        # The permanent public link where the file will live after upload
         public_url = f"https://storage.googleapis.com/{EVIDENCE_BUCKET_NAME}/{unique_filename}"
 
-        # RETURN ONLY THE URLs (No chat variables here!)
         return jsonify({
             "signedUrl": signed_url,
             "publicUrl": public_url
