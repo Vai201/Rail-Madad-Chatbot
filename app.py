@@ -20,6 +20,9 @@ import uuid
 # 2. LOAD ENV FIRST
 load_dotenv() 
 
+# A temporary memory cache to smuggle URLs past Dialogflow!
+ghost_media_storage = {}
+
 # Define your bucket name
 EVIDENCE_BUCKET_NAME = "rail-madad-evidence-bucket"
 
@@ -642,24 +645,25 @@ def get_random_closing_statement(dept):
 
 def handle_complaint_logging(request_json):
     try:
-        # --- THE FIX: Bypass Dialogflow parameters and grab the RAW text ---
-        raw_full_text = request_json['queryResult'].get('queryText', '')
+        # Retrieve the session string from Dialogflow
+        session_path = request_json.get('session', '')
         
-        # Extract the URL from the raw, uncut text
+        # --- RETRIEVE FROM GHOST STORAGE ---
         media_url = None
-        evidence_match = re.search(r'\[Evidence:\s*(https?://[^\]]+)\]', raw_full_text)
-        if evidence_match:
-            media_url = evidence_match.group(1)
-            
-        # Extract the complaint description
+        # Check if we have a URL saved in memory for this exact user session
+        for stored_session_id in list(ghost_media_storage.keys()):
+            if stored_session_id in session_path:
+                media_url = ghost_media_storage[stored_session_id]
+                # Delete it from memory immediately to keep the server clean
+                del ghost_media_storage[stored_session_id]
+                break
+                
         parameters = request_json['queryResult'].get('parameters', {})
         complaint_text = parameters.get('complaint_text', '')
         
-        # If Dialogflow chopped the text too much, fall back to the raw text minus the URL
+        # Fallback if Dialogflow didn't capture the text properly
         if not complaint_text:
-            complaint_text = re.sub(r'\n?\[Evidence:\s*https?://[^\]]+\]', '', raw_full_text).strip()
-        else:
-            complaint_text = re.sub(r'\n?\[Evidence:\s*https?://[^\]]+\]', '', complaint_text).strip()
+            complaint_text = request_json['queryResult'].get('queryText', '')
 
         # 1. Initialize variables and retrieve from Dialogflow Contexts
         pnr = ""
@@ -871,23 +875,20 @@ def chat_proxy():
     session_id = data.get('session_id', 'default-session')
     
     try:
-        # --- THE FIX: Hide the URL from Google Translate ---
-        media_url_tag = ""
-        # Look for the exact evidence tag React sent
-        evidence_match = re.search(r'\[Evidence:\s*(https?://[^\]]+)\]', user_message)
-        if evidence_match:
-            media_url_tag = evidence_match.group(0) # Grab the entire [Evidence: link] block
-            # Remove it from the user message so Google Translate doesn't ruin it!
-            user_message = user_message.replace(media_url_tag, '').strip()
+        # --- THE INVISIBLE SMUGGLER PROTOCOL ---
+        # 1. Look for the URL inside the incoming message
+        url_match = re.search(r'(https?://[^\s\]]+)', user_message)
+        if url_match:
+            # 2. Store it in Flask's temporary memory, locked to this specific user's session
+            ghost_media_storage[session_id] = url_match.group(1)
+            
+        # 3. Completely erase the URL from the text so Dialogflow never sees it
+        user_message = re.sub(r'\n?\[Evidence:\s*https?://[^\]]+\]', '', user_message).strip()
 
-        # 1. Translate ONLY the user's actual text into English
+        # 4. Translate ONLY the pure text into English
         english_input = process_translation(user_message, 'en')
         
-        # 1.5 Re-attach the pristine, untouched URL to the English text
-        if media_url_tag:
-            english_input = f"{english_input}\n{media_url_tag}"
-            
-        # 2. Send to Dialogflow
+        # 5. Send pure text to Dialogflow
         session_client = dialogflow.SessionsClient()
         session = session_client.session_path(DIALOGFLOW_PROJECT_ID, session_id)
         text_input = dialogflow.TextInput(text=english_input, language_code="en")
