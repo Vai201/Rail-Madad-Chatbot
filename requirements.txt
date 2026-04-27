@@ -8,3 +8,4 @@ SQLAlchemy
 google-generativeai
 google-cloud-translate
 google-cloud-dialogflow
+google-cloud-storage

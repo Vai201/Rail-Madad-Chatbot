@@ -13,9 +13,15 @@ import google.generativeai as genai
 from google.cloud import translate_v2 as translate
 from google.cloud import dialogflow_v2 as dialogflow
 from google.protobuf.json_format import MessageToDict
+from google.cloud import storage
+import datetime
+import uuid
 
 # 2. LOAD ENV FIRST
 load_dotenv() 
+
+# Define your bucket name
+EVIDENCE_BUCKET_NAME = "rail-madad-evidence-bucket"
 
 # 3. Define Constants
 DB_HOST = "/cloudsql/project-f988ee73-0741-4016-82c:asia-south1:rail-madad-db"
@@ -1267,6 +1273,45 @@ def department_dashboard():
         </body>
     </html>
     """
+
+@app.route('/api/generate-upload-url', methods=['POST'])
+def generate_upload_url():
+    """Generates a secure Signed URL so React can upload directly to GCP."""
+    try:
+        data = request.get_json()
+        file_name = data.get('fileName')
+        content_type = data.get('contentType')
+
+        if not file_name or not content_type:
+            return jsonify({"error": "Missing fileName or contentType"}), 400
+
+        # Generate a unique file name to prevent users from overwriting each other's files
+        unique_filename = f"{uuid.uuid4().hex}_{file_name}"
+
+        # Initialize the GCS client (It automatically uses your Cloud Run credentials!)
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(EVIDENCE_BUCKET_NAME)
+        blob = bucket.blob(unique_filename)
+
+        # Generate the VIP Pass (Signed URL) valid for 15 minutes
+        signed_url = blob.generate_signed_url(
+            version="v4",
+            expiration=datetime.timedelta(minutes=15),
+            method="PUT",
+            content_type=content_type
+        )
+
+        # The permanent public link where the file will live after upload
+        public_url = f"https://storage.googleapis.com/{EVIDENCE_BUCKET_NAME}/{unique_filename}"
+
+        return jsonify({
+            "signedUrl": signed_url,
+            "publicUrl": public_url
+        })
+
+    except Exception as e:
+        print(f"Error generating signed URL: {e}")
+        return jsonify({"error": "Could not generate upload URL"}), 500
 
 # --- 7. Run the Server ---
 if __name__ == '__main__':
