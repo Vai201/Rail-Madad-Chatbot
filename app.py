@@ -642,19 +642,24 @@ def get_random_closing_statement(dept):
 
 def handle_complaint_logging(request_json):
     try:
-        parameters = request_json['queryResult']['parameters']
-        raw_complaint = parameters.get('complaint_text', '')
+        # --- THE FIX: Bypass Dialogflow parameters and grab the RAW text ---
+        raw_full_text = request_json['queryResult'].get('queryText', '')
         
-        # --- NEW: EXTRACT THE MEDIA URL ---
+        # Extract the URL from the raw, uncut text
         media_url = None
-        # Look for the exact tag React sends: [Evidence: https://...]
-        evidence_match = re.search(r'\[Evidence:\s*(https?://[^\]]+)\]', raw_complaint)
+        evidence_match = re.search(r'\[Evidence:\s*(https?://[^\]]+)\]', raw_full_text)
         if evidence_match:
             media_url = evidence_match.group(1)
-            # Remove the URL from the text so the dashboard description looks clean
-            complaint_text = re.sub(r'\n?\[Evidence:\s*https?://[^\]]+\]', '', raw_complaint).strip()
+            
+        # Extract the complaint description
+        parameters = request_json['queryResult'].get('parameters', {})
+        complaint_text = parameters.get('complaint_text', '')
+        
+        # If Dialogflow chopped the text too much, fall back to the raw text minus the URL
+        if not complaint_text:
+            complaint_text = re.sub(r'\n?\[Evidence:\s*https?://[^\]]+\]', '', raw_full_text).strip()
         else:
-            complaint_text = raw_complaint
+            complaint_text = re.sub(r'\n?\[Evidence:\s*https?://[^\]]+\]', '', complaint_text).strip()
 
         # 1. Initialize variables and retrieve from Dialogflow Contexts
         pnr = ""
