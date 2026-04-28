@@ -169,6 +169,7 @@ def setup_database():
             date_of_travel TEXT
         );
         ''')
+        cursor.execute("ALTER TABLE bot_complaints ADD COLUMN IF NOT EXISTS sos_logs TEXT DEFAULT '';")
         conn.commit()
         release_db_connection(conn)
         print("✅ Cloud Database schema verified.")
@@ -1164,6 +1165,83 @@ def generate_upload_url():
     except Exception as e:
         print(f"Error generating signed URL: {e}")
         return jsonify({"error": "Could not generate upload URL"}), 500
+
+@app.route('/api/sos', methods=['POST'])
+def handle_sos():
+    """Handles the 48-Hour Emergency SOS Mode"""
+    data = request.get_json()
+    comp_id_raw = data.get('complaint_id', '')
+    user_message = data.get('message', '')
+
+    # Clean the ID (handles "C-45", "c-45", or just "45")
+    comp_id_str = str(comp_id_raw).replace('C-', '').replace('c-', '').strip()
+    if not comp_id_str.isdigit():
+        return jsonify({"reply": "Invalid Complaint ID format. Please use numbers only or 'C-XX'."})
+
+    comp_id = int(comp_id_str)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 1. Fetch the complaint
+        cursor.execute("""
+            SELECT department, timestamp, sos_logs FROM bot_complaints 
+            WHERE complaint_id = %s
+        """, (comp_id,))
+        
+        record = cursor.fetchone()
+        if not record:
+            release_db_connection(conn)
+            return jsonify({"reply": "Complaint ID not found in our system."})
+            
+        dept, ts, sos_logs = record
+        
+        # 2. STRICT 48-HOUR CHECK
+        from datetime import datetime, timedelta
+        if datetime.now() - ts > timedelta(hours=48):
+            release_db_connection(conn)
+            return jsonify({"reply": "SOS Assistance has expired (only available for 48 hours post-complaint)."})
+            
+        # 3. STRICT DEPARTMENT CHECK
+        if dept not in ["Security", "Medical Assistance"]:
+            release_db_connection(conn)
+            return jsonify({"reply": f"SOS mode is strictly for Security and Medical emergencies. Your original complaint is registered under {dept}."})
+
+        # 4. LLM ABUSE GUARDRAILS
+        prompt = f"""
+        You are the RailMadad SOS Emergency Responder. 
+        The passenger is referencing a recent {dept} emergency.
+        User's SOS Message: "{user_message}"
+        
+        Strict Rules:
+        1. Limit response to 1-2 sentences.
+        2. Provide immediate, practical safety/first-aid advice.
+        3. Do NOT provide medical diagnoses or dangerous tactical advice.
+        4. ANTI-ABUSE: If the user's message is abusive, testing the system, or unrelated to an emergency, reply EXACTLY with: "SOS mode is strictly for emergency assistance. Please refrain from non-emergency queries."
+        5. Be calm and authoritative.
+        """
+        
+        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+        response = model.generate_content(prompt)
+        ai_reply = response.text
+        
+        # 5. LOG THE INTERACTION FOR THE ADMINS
+        new_log = f"User: {user_message}<br>AI: {ai_reply}<br><hr>"
+        updated_logs = (sos_logs or "") + new_log
+        
+        cursor.execute("""
+            UPDATE bot_complaints SET sos_logs = %s WHERE complaint_id = %s
+        """, (updated_logs, comp_id))
+        
+        conn.commit()
+        release_db_connection(conn)
+        
+        return jsonify({"reply": ai_reply})
+        
+    except Exception as e:
+        print(f"SOS Error: {e}")
+        return jsonify({"reply": "SOS System Error. Please contact railway staff immediately."})
 
 # --- 7. Run the Server ---
 if __name__ == '__main__':

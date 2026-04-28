@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Send, Sparkles, Globe, ChevronDown, Paperclip, Loader2 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { X, Send, Sparkles, Globe, ChevronDown, Paperclip, Loader2, Navigation, AlertTriangle, MessageSquare } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const BACKEND_URL = 'https://rail-madad-chatbot-1094417494880.asia-south1.run.app';
 
@@ -18,11 +18,16 @@ const SUPPORTED_LANGUAGES = [
 ];
 
 export function ChatbotCapsule() {
+  // UI States
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
+  // App Modes (Bypasses Dialogflow for Tracking & SOS)
+  const [chatMode, setChatMode] = useState<'normal' | 'tracking' | 'sos_auth' | 'sos_active'>('normal');
+  const [sosId, setSosId] = useState("");
+
   // Language States
   const [language, setLanguage] = useState("en");
   const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
@@ -32,14 +37,15 @@ export function ChatbotCapsule() {
   const [isUploading, setIsUploading] = useState(false);
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
+  
+  // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
-
   const sessionIdRef = useRef("session-" + Math.random().toString(36).substring(7));
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const hasInitialized = useRef(false);
 
   const currentLangLabel = SUPPORTED_LANGUAGES.find(l => l.code === language)?.label || 'English';
 
+  // Auto-scroll to bottom of chat
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -48,20 +54,16 @@ export function ChatbotCapsule() {
     scrollToBottom();
   }, [messages, isLoading]);
 
-  useEffect(() => {
-    if (!hasInitialized.current) {
-      hasInitialized.current = true;
-      sendMessageToApi("Hi", true);
-    }
-  }, []);
-
+  // Handle Changing Language
   const handleLanguageChange = (newLang: string) => {
     setLanguage(newLang);
-    setMessages([]); // Clear chat UI
-    sessionIdRef.current = "session-" + Math.random().toString(36).substring(7); // Reset Dialogflow context
-    sendMessageToApi("Hi", true, newLang); // Fetch new greeting in selected language
+    setMessages([]); 
+    setChatMode('normal');
+    sessionIdRef.current = "session-" + Math.random().toString(36).substring(7); // Reset Contexts
+    // Don't auto-fetch "Hi", let the Dashboard show instead!
   };
 
+  // Standard Dialogflow Chat Function
   const sendMessageToApi = async (text: string, isHiddenInit = false, overrideLang?: string) => {
     if (!text.trim()) return;
 
@@ -87,7 +89,7 @@ export function ChatbotCapsule() {
       // Unlock the upload button ONLY if Dialogflow says it is time!
       setAllowMediaUpload(data.allow_upload || false);
       
-      // Split the text by the <br><br> tags so each part becomes its own chat bubble!
+      // Split the text by the <br><br> tags so each part becomes its own chat bubble
       const repliesArray = (data.reply || "").split('<br><br>');
       const newMessages = repliesArray.map((replyText: string, index: number) => ({
         id: Date.now().toString() + "-" + index,
@@ -110,13 +112,13 @@ export function ChatbotCapsule() {
     }
   };
 
+  // Direct File Upload to Google Cloud Storage
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
     try {
-      // 1. Get the "VIP Pass" (Signed URL) from your Flask server
       const res = await fetch(`${BACKEND_URL}/api/generate-upload-url`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -125,14 +127,12 @@ export function ChatbotCapsule() {
       
       const { signedUrl, publicUrl } = await res.json();
 
-      // 2. Upload directly from the browser to Google Cloud Storage (Bypasses the 5-sec Dialogflow limit!)
       await fetch(signedUrl, {
         method: 'PUT',
         headers: { 'Content-Type': file.type },
         body: file
       });
 
-      // 3. Save the permanent public URL to attach to the next message
       setAttachmentUrl(publicUrl);
       setAttachmentName(file.name);
     } catch (error) {
@@ -143,28 +143,79 @@ export function ChatbotCapsule() {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // THE MASTER INTERCEPTOR: Handles Normal Chat, SOS, and Tracking
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim() && !attachmentUrl) return;
 
-    // If they attached a file, secretly append the URL to their text message
-    let finalMessageText = message;
-    if (attachmentUrl) {
-      finalMessageText += `\n[Evidence: ${attachmentUrl}]`;
-    }
-
+    const userText = message;
     const displayMessage = message || "Sent an attachment 📎";
-
-    // Show the clean message in the UI, but send the URL to Dialogflow under the hood
-    setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', text: displayMessage }]);
     
+    // Clear Input
     setMessage(""); 
     setAttachmentUrl(null);
     setAttachmentName(null);
-    setAllowMediaUpload(false); // Hide the button once sent
+    setAllowMediaUpload(false); 
     
-    // We send the finalMessageText (which contains the URL) to the API
-    sendMessageToApi(finalMessageText, true); 
+    // Show User Message
+    setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', text: displayMessage }]);
+    setIsLoading(true);
+
+    try {
+      // MODE 1: TRACKING
+      if (chatMode === 'tracking') {
+        const res = await fetch(`${BACKEND_URL}/api/track`, {
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone_number: userText })
+        });
+        const data = await res.json();
+        
+        let replyText = "";
+        if (data.complaints && data.complaints.length > 0) {
+            replyText = data.complaints.map((c: any) => `<b>ID:</b> ${c.id}<br><b>Status:</b> ${c.status}<br><b>Dept:</b> ${c.department}<br><b>Resolution:</b> ${c.resolution || 'Pending'}`).join('<br><br>---<br><br>');
+        } else {
+            replyText = "No complaints found for this number.";
+        }
+        
+        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: replyText }]);
+        setChatMode('normal'); // Reset after tracking
+        setIsLoading(false);
+      } 
+      
+      // MODE 2: SOS AUTHENTICATION
+      else if (chatMode === 'sos_auth') {
+        setSosId(userText); 
+        setChatMode('sos_active');
+        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: "Complaint ID logged. What is your immediate emergency? (Tactical help will be provided)" }]);
+        setIsLoading(false);
+      } 
+      
+      // MODE 3: SOS ACTIVE (Direct to LLM, bypass Dialogflow)
+      else if (chatMode === 'sos_active') {
+        const res = await fetch(`${BACKEND_URL}/api/sos`, {
+          method: 'POST', 
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ complaint_id: sosId, message: userText })
+        });
+        const data = await res.json();
+        setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: "🚨 " + data.reply }]);
+        setIsLoading(false);
+      } 
+      
+      // MODE 4: NORMAL DIALOGFLOW CHAT
+      else {
+        let finalMessageText = userText;
+        if (attachmentUrl) {
+          finalMessageText += `\n[Evidence: ${attachmentUrl}]`;
+        }
+        // Let sendMessageToApi handle the isLoading = false
+        await sendMessageToApi(finalMessageText, true); 
+      }
+    } catch (err) {
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: "Connection error. Please try again." }]);
+      setIsLoading(false);
+    } 
   };
 
   return (
@@ -175,34 +226,35 @@ export function ChatbotCapsule() {
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 w-96 max-w-[calc(100vw-2rem)]"
+            className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 w-[400px] max-w-[calc(100vw-2rem)]"
           >
-            <div className="bg-white rounded-3xl shadow-2xl border border-indigo-100 overflow-hidden flex flex-col h-[520px]">
+            <div className="bg-white rounded-3xl shadow-2xl border border-indigo-100 overflow-hidden flex flex-col h-[560px]">
               
               {/* Header */}
-              <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-4 py-3.5 flex items-center justify-between shadow-md z-10">
+              <div className={`px-4 py-3.5 flex items-center justify-between shadow-md z-10 transition-colors ${chatMode === 'sos_active' ? 'bg-gradient-to-r from-rose-600 to-red-600' : 'bg-gradient-to-r from-indigo-600 to-blue-600'}`}>
                 <div className="flex items-center gap-3">
                   <div className="relative">
                     <div className="size-8 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30">
                       <Sparkles className="size-4 text-white" />
                     </div>
-                    <div className="absolute bottom-0 right-0 size-2.5 bg-green-400 rounded-full border-2 border-indigo-600 animate-pulse" />
+                    <div className="absolute bottom-0 right-0 size-2.5 bg-green-400 rounded-full border-2 border-white animate-pulse" />
                   </div>
                   <div>
                     <span className="text-white font-bold text-sm block leading-tight">RailBot Assistant</span>
-                    <span className="text-[10px] text-indigo-100 uppercase tracking-widest font-semibold">Live AI Agent</span>
+                    <span className="text-[10px] text-white/80 uppercase tracking-widest font-semibold">
+                      {chatMode === 'sos_active' ? "🚨 SOS MODE ACTIVE" : "Live AI Agent"}
+                    </span>
                   </div>
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  
-                  {/* BEAUTIFIED CUSTOM LANGUAGE SELECTOR */}
+                  {/* Language Selector */}
                   <div className="relative">
                     <button 
                       onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
                       className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 border border-white/20 transition-all rounded-full px-3 py-1.5 backdrop-blur-md text-white text-xs font-bold shadow-sm"
                     >
-                      <Globe className="size-3.5 text-indigo-100" />
+                      <Globe className="size-3.5 text-white/90" />
                       <span>{currentLangLabel}</span>
                       <ChevronDown className={`size-3.5 transition-transform duration-300 ${isLangMenuOpen ? 'rotate-180' : ''}`} />
                     </button>
@@ -210,17 +262,12 @@ export function ChatbotCapsule() {
                     <AnimatePresence>
                       {isLangMenuOpen && (
                         <>
-                          <div 
-                            className="fixed inset-0 z-40"
-                            onClick={() => setIsLangMenuOpen(false)}
-                          />
-                          
+                          <div className="fixed inset-0 z-40" onClick={() => setIsLangMenuOpen(false)} />
                           <motion.div
                             initial={{ opacity: 0, y: 10, scale: 0.95 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                            transition={{ duration: 0.15, ease: "easeOut" }}
-                            className="absolute top-full right-0 mt-2 w-36 bg-white rounded-2xl shadow-2xl border border-indigo-100 overflow-hidden z-50 origin-top-right"
+                            className="absolute top-full right-0 mt-2 w-36 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 origin-top-right"
                           >
                             <div className="py-1.5 px-1.5 flex flex-col gap-1">
                               {SUPPORTED_LANGUAGES.map((lang) => (
@@ -257,16 +304,67 @@ export function ChatbotCapsule() {
               </div>
 
               {/* Chat Area */}
-              <div className="flex-1 p-4 overflow-y-auto bg-slate-50/50 scroll-smooth">
+              <div className={`flex-1 p-4 overflow-y-auto scroll-smooth ${chatMode === 'sos_active' ? 'bg-rose-50/30' : 'bg-slate-50/50'}`}>
+                
+                {/* 🌟 THE DASHBOARD MENU (Only shows when chat is empty) */}
                 {messages.length === 0 && !isLoading && (
-                   <div className="flex flex-col items-center justify-center py-10 opacity-60">
-                      <div className="size-16 bg-indigo-100 rounded-full flex items-center justify-center text-3xl mb-3 animate-bounce shadow-inner">👋</div>
-                      <p className="text-slate-500 font-bold text-sm">Welcome to RailMadad</p>
+                   <div className="flex flex-col items-center justify-center py-6 animate-in fade-in zoom-in duration-500">
+                      <div className="size-16 bg-indigo-100 rounded-full flex items-center justify-center text-3xl mb-3 shadow-inner">👋</div>
+                      <p className="text-slate-500 font-bold text-sm mb-6">How can we help you today?</p>
+                      
+                      <div className="w-full flex flex-col gap-3 px-2">
+                        <button 
+                          onClick={() => { setChatMode('normal'); sendMessageToApi("Register Complaint", true); }} 
+                          className="flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:border-indigo-400 hover:shadow-md transition-all text-left group"
+                        >
+                          <div className="bg-indigo-50 p-2.5 rounded-full text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                            <MessageSquare className="size-5" />
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-800 text-sm">Register Complaint</div>
+                            <div className="text-xs text-slate-500">File a new issue or query</div>
+                          </div>
+                        </button>
+                        
+                        <button 
+                          onClick={() => { 
+                            setChatMode('tracking'); 
+                            setMessages([{id: '1', role: 'bot', text: "Please enter your 10-digit mobile number to track your open complaints."}]); 
+                          }} 
+                          className="flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all text-left group"
+                        >
+                          <div className="bg-blue-50 p-2.5 rounded-full text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                            <Navigation className="size-5" />
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-800 text-sm">Track Complaint</div>
+                            <div className="text-xs text-slate-500">Check live resolution status</div>
+                          </div>
+                        </button>
+
+                        <button 
+                          onClick={() => { 
+                            setChatMode('sos_auth'); 
+                            setMessages([{id: '1', role: 'bot', text: "🚨 <b>SOS MODE:</b> Please enter your Complaint ID (e.g., C-45) to verify."}]); 
+                          }} 
+                          className="flex items-center gap-4 bg-rose-50 p-4 rounded-2xl shadow-sm border border-rose-200 hover:border-rose-400 hover:shadow-md transition-all text-left group"
+                        >
+                          <div className="bg-rose-100 p-2.5 rounded-full text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition-colors">
+                            <AlertTriangle className="size-5" />
+                          </div>
+                          <div>
+                            <div className="font-bold text-rose-800 text-sm">SOS Emergency</div>
+                            <div className="text-xs text-rose-600">48-Hour Live Tactical Assistance</div>
+                          </div>
+                        </button>
+                      </div>
                    </div>
                 )}
 
+                {/* The Chat Bubbles */}
                 {messages.map((msg, index) => {
                   const isLastMessage = index === messages.length - 1;
+                  const isEmergency = msg.text.includes('🚨');
                   
                   return (
                     <motion.div 
@@ -276,23 +374,25 @@ export function ChatbotCapsule() {
                       className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2.5 mb-5`}
                     >
                       {msg.role === 'bot' && (
-                        <div className="size-8 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-sm border border-indigo-200">
+                        <div className={`size-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-sm border ${isEmergency || chatMode === 'sos_active' ? 'bg-gradient-to-br from-rose-500 to-red-500 border-rose-200' : 'bg-gradient-to-br from-indigo-500 to-blue-500 border-indigo-200'}`}>
                           <Sparkles className="size-4 text-white" />
                         </div>
                       )}
                       
                       <div className={`max-w-[85%] flex flex-col gap-1.5 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                        {/* Red Emergency Tint Logic Restored Here */}
-                        <div className={`px-4 py-2.5 text-sm shadow-sm leading-relaxed rounded-2xl ${
-                          msg.role === 'user' 
-                            ? 'bg-gradient-to-br from-indigo-600 to-blue-600 text-white rounded-tr-sm border border-indigo-700' 
-                            : msg.text.includes('🚨') 
-                              ? 'bg-rose-50 text-rose-900 rounded-tl-sm border border-rose-200 shadow-rose-100'
-                              : 'bg-white text-slate-800 rounded-tl-sm border border-slate-200'
-                        }`}>
-                          {msg.text}
-                        </div>
+                        {/* THE BUBBLE ITSELF (Handles HTML via dangerouslySetInnerHTML) */}
+                        <div 
+                          className={`px-4 py-2.5 text-sm shadow-sm leading-relaxed rounded-2xl ${
+                            msg.role === 'user' 
+                              ? 'bg-gradient-to-br from-indigo-600 to-blue-600 text-white rounded-tr-sm border border-indigo-700' 
+                              : isEmergency || chatMode === 'sos_active'
+                                ? 'bg-rose-50 text-rose-900 rounded-tl-sm border border-rose-200 shadow-rose-100 font-medium'
+                                : 'bg-white text-slate-800 rounded-tl-sm border border-slate-200'
+                          }`}
+                          dangerouslySetInnerHTML={{ __html: msg.text }}
+                        />
 
+                        {/* Interactive Chip Buttons */}
                         {msg.role === 'bot' && msg.buttons && msg.buttons.length > 0 && isLastMessage && (
                           <div className="flex flex-wrap gap-2 mt-1">
                             {msg.buttons.map((btn, i) => (
@@ -315,7 +415,7 @@ export function ChatbotCapsule() {
 
                 {isLoading && (
                   <div className="flex justify-start gap-2.5 mb-5">
-                    <div className="size-8 bg-gradient-to-br from-indigo-500 to-blue-500 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-sm border border-indigo-200">
+                    <div className="size-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-sm bg-gradient-to-br from-indigo-500 to-blue-500 border-indigo-200">
                       <Sparkles className="size-4 text-white" />
                     </div>
                     <div className="px-5 py-3 text-[11px] bg-white text-slate-400 rounded-2xl rounded-tl-sm border border-slate-200 italic shadow-sm flex items-center gap-1.5">
@@ -332,7 +432,10 @@ export function ChatbotCapsule() {
               </div>
 
               {/* Input Area */}
-              <form onSubmit={handleSubmit} className="p-3 bg-white border-t border-slate-100 flex flex-col gap-2">
+              <form 
+                onSubmit={handleSubmit} 
+                className={`p-3 border-t flex flex-col gap-2 transition-colors ${chatMode === 'sos_active' || chatMode === 'sos_auth' ? 'bg-rose-50 border-rose-100' : 'bg-white border-slate-100'}`}
+              >
                 
                 {/* Attachment Preview Bubble */}
                 {attachmentName && (
@@ -355,8 +458,8 @@ export function ChatbotCapsule() {
                     className="hidden" 
                   />
                   
-                  {/* The Dynamic Upload Button */}
-                  {allowMediaUpload && (
+                  {/* The Dynamic Upload Button (Only in Normal Chat) */}
+                  {allowMediaUpload && chatMode === 'normal' && (
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
@@ -372,13 +475,21 @@ export function ChatbotCapsule() {
                     type="text"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
-                    placeholder={allowMediaUpload ? "Describe issue & attach photo..." : "Type your message..."}
-                    className="flex-1 pl-4 pr-12 py-3 rounded-full bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 text-sm transition-all shadow-inner"
+                    placeholder={chatMode === 'sos_active' ? "Describe your emergency..." : chatMode === 'tracking' ? "Enter 10-digit number..." : allowMediaUpload ? "Describe issue & attach photo..." : "Type your message..."}
+                    className={`flex-1 pl-4 pr-12 py-3 rounded-full border focus:outline-none focus:ring-2 text-sm transition-all shadow-inner ${
+                      chatMode === 'sos_active' || chatMode === 'sos_auth' 
+                        ? 'bg-white border-rose-200 focus:ring-rose-500/20 focus:border-rose-500' 
+                        : 'bg-slate-50 border-slate-200 focus:ring-indigo-500/20 focus:border-indigo-500'
+                    }`}
                   />
                   
                   <button
                     type="submit"
-                    className="absolute right-1 top-1 bottom-1 aspect-square bg-gradient-to-br from-indigo-600 to-blue-600 rounded-full flex items-center justify-center text-white hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className={`absolute right-1 top-1 bottom-1 aspect-square rounded-full flex items-center justify-center text-white hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      chatMode === 'sos_active' || chatMode === 'sos_auth'
+                        ? 'bg-gradient-to-br from-rose-600 to-red-600'
+                        : 'bg-gradient-to-br from-indigo-600 to-blue-600'
+                    }`}
                     disabled={(!message.trim() && !attachmentUrl) || isLoading || isUploading}
                   >
                     <Send className="size-4" />
@@ -390,6 +501,7 @@ export function ChatbotCapsule() {
         )}
       </AnimatePresence>
 
+      {/* Floating Action Button */}
       <motion.button
         onClick={() => setIsOpen(!isOpen)}
         className="relative group"

@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router";
 import { Menu, X } from "lucide-react";
 import { useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence } from "framer-motion";
 
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
@@ -36,7 +36,7 @@ export function Navigation() {
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center gap-1">
+          <div className="hidden md:flex items-center gap-2">
             {navLinks.map((link) => (
               <Link
                 key={link.path}
@@ -61,6 +61,17 @@ export function Navigation() {
                 )}
               </Link>
             ))}
+            
+            {/* 🔍 Track Complaint Navbar Capsule */}
+            <div className="ml-2 pl-3 border-l border-slate-200">
+              <button 
+                onClick={() => window.alert("Open the RailBot at the bottom of the screen and select 'Track Complaint'")} 
+                className="flex items-center gap-2 px-4 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-full text-slate-700 text-sm font-bold shadow-sm transition-all hover:shadow cursor-pointer active:scale-95"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                Track Complaint
+              </button>
+            </div>
           </div>
 
           {/* Mobile Menu Button */}
@@ -97,6 +108,20 @@ export function Navigation() {
                     {link.label}
                   </Link>
                 ))}
+                
+                {/* 🔍 Mobile Track Complaint Button */}
+                <div className="px-4 pt-2 mt-2 border-t border-slate-100">
+                  <button 
+                    onClick={() => {
+                      setIsOpen(false);
+                      window.alert("Open the RailBot at the bottom of the screen and select 'Track Complaint'");
+                    }} 
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-slate-700 text-sm font-bold shadow-sm transition-all active:scale-95"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+                    Track Complaint
+                  </button>
+                </div>
               </div>
             </motion.div>
           )}
