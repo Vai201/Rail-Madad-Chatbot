@@ -54,13 +54,24 @@ export function ChatbotCapsule() {
     scrollToBottom();
   }, [messages, isLoading]);
 
+  // --- THE MAGIC LINK: Listens for the Navbar Button Click ---
+  useEffect(() => {
+    const handleRemoteTracking = () => {
+      setIsOpen(true);
+      setChatMode('tracking');
+      setMessages([{id: Date.now().toString(), role: 'bot', text: "Please enter your 10-digit mobile number to track your open complaints."}]);
+    };
+    
+    window.addEventListener('open-railbot-tracking', handleRemoteTracking);
+    return () => window.removeEventListener('open-railbot-tracking', handleRemoteTracking);
+  }, []);
+
   // Handle Changing Language
   const handleLanguageChange = (newLang: string) => {
     setLanguage(newLang);
     setMessages([]); 
     setChatMode('normal');
-    sessionIdRef.current = "session-" + Math.random().toString(36).substring(7); // Reset Contexts
-    // Don't auto-fetch "Hi", let the Dashboard show instead!
+    sessionIdRef.current = "session-" + Math.random().toString(36).substring(7);
   };
 
   // Standard Dialogflow Chat Function
@@ -164,10 +175,23 @@ export function ChatbotCapsule() {
     try {
       // MODE 1: TRACKING
       if (chatMode === 'tracking') {
+        const cleanNumber = userText.replace(/\D/g, '');
+        if (userText.toLowerCase() === 'cancel') {
+            setChatMode('normal');
+            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: "Tracking cancelled. How can I help you today?" }]);
+            setIsLoading(false);
+            return;
+        }
+        if (cleanNumber.length !== 10) {
+            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: "That doesn't look like a valid 10-digit number. Please try again, or type 'cancel' to exit." }]);
+            setIsLoading(false);
+            return;
+        }
+
         const res = await fetch(`${BACKEND_URL}/api/track`, {
           method: 'POST', 
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone_number: userText })
+          body: JSON.stringify({ phone_number: cleanNumber })
         });
         const data = await res.json();
         
@@ -179,12 +203,18 @@ export function ChatbotCapsule() {
         }
         
         setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: replyText }]);
-        setChatMode('normal'); // Reset after tracking
+        setChatMode('normal'); 
         setIsLoading(false);
       } 
       
       // MODE 2: SOS AUTHENTICATION
       else if (chatMode === 'sos_auth') {
+        if (userText.toLowerCase() === 'cancel') {
+            setChatMode('normal');
+            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: "SOS mode deactivated. How can I help you today?" }]);
+            setIsLoading(false);
+            return;
+        }
         setSosId(userText); 
         setChatMode('sos_active');
         setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: "Complaint ID logged. What is your immediate emergency? (Tactical help will be provided)" }]);
@@ -209,7 +239,6 @@ export function ChatbotCapsule() {
         if (attachmentUrl) {
           finalMessageText += `\n[Evidence: ${attachmentUrl}]`;
         }
-        // Let sendMessageToApi handle the isLoading = false
         await sendMessageToApi(finalMessageText, true); 
       }
     } catch (err) {
@@ -314,15 +343,15 @@ export function ChatbotCapsule() {
                       
                       <div className="w-full flex flex-col gap-3 px-2">
                         <button 
-                          onClick={() => { setChatMode('normal'); sendMessageToApi("Register Complaint", true); }} 
+                          onClick={() => { setChatMode('normal'); sendMessageToApi("Hi", true); }} 
                           className="flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:border-indigo-400 hover:shadow-md transition-all text-left group"
                         >
                           <div className="bg-indigo-50 p-2.5 rounded-full text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                             <MessageSquare className="size-5" />
                           </div>
                           <div>
-                            <div className="font-bold text-slate-800 text-sm">Register Complaint</div>
-                            <div className="text-xs text-slate-500">File a new issue or query</div>
+                            <div className="font-bold text-slate-800 text-sm">New Query / Complaint</div>
+                            <div className="text-xs text-slate-500">Ask a question or file an issue</div>
                           </div>
                         </button>
                         

@@ -65,7 +65,7 @@ export function Navigation() {
             {/* 🔍 Track Complaint Navbar Capsule */}
             <div className="ml-2 pl-3 border-l border-slate-200">
               <button 
-                onClick={() => window.alert("Open the RailBot at the bottom of the screen and select 'Track Complaint'")} 
+                onClick={() => window.dispatchEvent(new CustomEvent('open-railbot-tracking'))} 
                 className="flex items-center gap-2 px-4 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-full text-slate-700 text-sm font-bold shadow-sm transition-all hover:shadow cursor-pointer active:scale-95"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-600"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
@@ -114,7 +114,7 @@ export function Navigation() {
                   <button 
                     onClick={() => {
                       setIsOpen(false);
-                      window.alert("Open the RailBot at the bottom of the screen and select 'Track Complaint'");
+                      window.dispatchEvent(new CustomEvent('open-railbot-tracking'));
                     }} 
                     className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-slate-700 text-sm font-bold shadow-sm transition-all active:scale-95"
                   >
