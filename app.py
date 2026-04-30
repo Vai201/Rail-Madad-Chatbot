@@ -157,11 +157,11 @@ def setup_database():
         );
         ''')
         
+        # Safely holds media URLs while Dialogflow processes the text
         cursor.execute('''
-        CREATE TABLE IF NOT EXISTS pnr_records (
-            pnr_number TEXT PRIMARY KEY,
-            train_no TEXT,
-            date_of_travel TEXT
+        CREATE TABLE IF NOT EXISTS session_media (
+            session_id TEXT PRIMARY KEY,
+            media_url TEXT
         );
         ''')
         
@@ -182,6 +182,11 @@ def setup_database():
         print(f"❌ ERROR setting up database: {e}")
         
 def cleanup_old_complaints():
+    # FORCE DB SETUP ON STARTUP
+    try:
+        setup_database()
+    except:
+        pass
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -554,28 +559,28 @@ def get_random_closing_statement(dept):
     return random.choice(statements.get(dept, statements["Default"]))
 
 def handle_complaint_logging(request_json):
+    conn = None
     try:
         session_path = request_json.get('session', '')
-        # Extract the pure Session ID
         session_id = session_path.split('/')[-1]
-        
+
+        # 1. Establish ONE database connection for the entire function
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # 2. Grab the URL from the secure DB table
         media_url = None
         try:
-            # GRAB THE URL FROM THE SECURE DB TABLE
-            conn = get_db_connection()
-            cursor = conn.cursor()
             cursor.execute("SELECT media_url FROM session_media WHERE session_id = %s", (session_id,))
             row = cursor.fetchone()
             if row:
                 media_url = row[0]
-                # Clean up the memory table
                 cursor.execute("DELETE FROM session_media WHERE session_id = %s", (session_id,))
-            conn.commit()
         except Exception as e:
             print(f"Error fetching media URL from DB: {e}")
-            if conn:
-                conn.rollback()
+            conn.rollback() # Rollback just this tiny error, but keep going!
 
+        # 3. Extract Dialogflow parameters
         parameters = request_json['queryResult'].get('parameters', {})
         complaint_text = parameters.get('complaint_text', '')
         
@@ -602,6 +607,7 @@ def handle_complaint_logging(request_json):
                 if not travel_date:
                     travel_date = params.get('travel_date', '')
 
+        # 4. Route and Categorize
         dept, advice_tip = categorize_complaint(complaint_text)
         
         if dept == "Medical Assistance":
@@ -615,6 +621,7 @@ def handle_complaint_logging(request_json):
         status = "Open"
         closing_msg = "" 
 
+        # 5. Insert the final complaint
         cursor.execute(
             """INSERT INTO bot_complaints 
                (phone_number, pnr, token, station, travel_date, complaint_text, department, agency, status, closing_statement, media_url) 
@@ -622,8 +629,9 @@ def handle_complaint_logging(request_json):
             (phone_number, pnr_to_store, token, station, travel_date, complaint_text, dept, agency, status, closing_msg, media_url)
         )
         new_id = cursor.fetchone()[0]
+        
+        # 6. COMMIT the entire transaction (URL removal + Complaint Insert)
         conn.commit()
-        release_db_connection(conn)
 
         base_msg = f"Complaint registered (ID: C-{new_id}) routed to {dept} ({agency})."
         
@@ -648,7 +656,14 @@ def handle_complaint_logging(request_json):
 
     except Exception as e:
         print(f"Error in complaint logging: {e}")
+        if conn:
+            conn.rollback() # Failsafe
         return {"fulfillmentText": "Sorry, there was an error lodging your complaint. Please try again."}
+    
+    finally:
+        # ALWAYS release the database connection safely!
+        if conn:
+            release_db_connection(conn)
 
 # --- 5. Main Webhook Router ---
 @app.route('/webhook', methods=['POST'])
@@ -705,31 +720,30 @@ def chat_proxy():
     selected_language = data.get('language', 'en')
     session_id = data.get('session_id', 'default-session')
     
+    # 1. Grab the media_url directly from the React frontend JSON
+    media_url = data.get('media_url')
+    
     try:
-        # THE URL SMUGGLING FIX
-        extracted_url = None
-        url_match = re.search(r'\[Evidence:\s*(https?://[^\s\]]+)\]', user_message)
-        if url_match:
-            extracted_url = url_match.group(1)
-            user_message = user_message.replace(url_match.group(0), '').strip()
+        # 2. Strip the [Evidence: URL] tag out of the text so Google Translate/Dialogflow don't crash
+        user_message = re.sub(r'\n?\[Evidence:\s*https?://[^\]]+\]', '', user_message).strip()
 
-        # If user just uploaded a photo and sent no text, give Dialogflow dummy text
-        if not user_message and extracted_url:
+        # 3. If user just uploaded a photo and sent no text, give Dialogflow dummy text to read
+        if not user_message and media_url:
             user_message = "I have attached a photo as evidence for my complaint."
 
-        # Store URL in DB immediately
-        if extracted_url:
+        # 4. Store URL in DB immediately so the webhook can find it later
+        if media_url:
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO session_media (session_id, media_url)
                 VALUES (%s, %s)
                 ON CONFLICT (session_id) DO UPDATE SET media_url = EXCLUDED.media_url;
-            """, (session_id, extracted_url))
+            """, (session_id, media_url))
             conn.commit()
             release_db_connection(conn)
 
-        # Safely translate the pure text
+        # 5. Safely translate the pure text
         english_input = process_translation(user_message, 'en')
         
         session_client = dialogflow.SessionsClient()
@@ -887,7 +901,6 @@ def cron_auto_close():
 # --- 6. ADMIN DASHBOARD PAGES ---
 def get_db_as_html_table(query):
     try:
-        setup_database() 
         conn = get_db_connection()
         import warnings
         with warnings.catch_warnings():
@@ -895,17 +908,18 @@ def get_db_as_html_table(query):
             df = pd.read_sql_query(query, conn)
         release_db_connection(conn)
         
-        if df.empty:
-            return "<p>No records found in this database table.</p>"
-            
-        def make_clickable(val):
-            if pd.isna(val) or not val: return ""
-            if isinstance(val, str) and val.startswith("http"):
-                return f'<a href="{val}" target="_blank" style="background:#f8f9fa; border:1px solid #dadce0; padding:4px 8px; border-radius:4px; color:#1a73e8; text-decoration:none; font-weight:bold;">📎 View Evidence</a>'
-            return val
-            
-        if 'media_url' in df.columns:
-            df['media_url'] = df['media_url'].apply(make_clickable)
+        if df.empty: return "<p>No records found.</p>"
+        
+        # Transforms URL into a clickable link in an 'Evidence' column where the text is the C-ID!
+        if 'media_url' in df.columns and 'complaint_id' in df.columns:
+            df['Evidence'] = df.apply(
+                lambda row: f'<a href="{row["media_url"]}" target="_blank" style="color:#1a73e8; font-weight:bold; text-decoration:underline;">C-{row["complaint_id"]}</a>' 
+                if pd.notna(row["media_url"]) and str(row["media_url"]).strip() != "" else "None", 
+                axis=1
+            )
+            idx = df.columns.get_loc('media_url')
+            df.insert(idx, 'Evidence', df.pop('Evidence'))
+            df = df.drop(columns=['media_url'])
 
         # Escape=False stops pandas from converting HTML tags to raw text
         return df.to_html(index=False, border=0, classes="table", escape=False)
@@ -1003,16 +1017,17 @@ def department_dashboard():
         ORDER BY c.timestamp DESC
     """
     table_rows = ""
+    conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(query, (selected_dept,))
         records = cursor.fetchall()
-        release_db_connection(conn)
         
         for row in records:
             comp_id, ts, phone, pnr, token, text, status, train_no, travel_date, closing_statement, station, media_url = row
             
+            # Logic for Masking and Mock Data
             mock_coach = f"{random.choice(['B','A','S'])}{hash(pnr) % 9 + 1}" if pnr and pnr != "UNRESERVED" and not str(pnr).startswith("REDACTED") else "N/A"
             mock_seat = str(hash(pnr) % 72 + 1) if pnr and pnr != "UNRESERVED" and not str(pnr).startswith("REDACTED") else "N/A"
             
@@ -1031,9 +1046,10 @@ def department_dashboard():
             date_display = travel_date if travel_date else "N/A"
             station_display = station if station else "Not Provided"
             
-            text_display = text
+            # --- THE NEW CLICKABLE EVIDENCE COLUMN LOGIC ---
+            media_html = "None"
             if media_url:
-                text_display += f'<br><br><a href="{media_url}" target="_blank" style="display: inline-flex; align-items: center; gap: 4px; background: #f8f9fa; border: 1px solid #dadce0; padding: 4px 8px; border-radius: 4px; color: #1a73e8; text-decoration: none; font-size: 0.85em; font-weight: bold;">📎 View Evidence</a>'
+                media_html = f'<a href="{media_url}" target="_blank" style="color:#1a73e8; font-weight:bold; text-decoration:underline;">C-{comp_id}</a>'
             
             status_color = "green" if status == "Closed" else "orange"
             status_html = f'<b style="color:{status_color};">{status}</b>'
@@ -1051,12 +1067,16 @@ def department_dashboard():
                 <td style="color: #0f9d58; font-weight: bold;">{station_display}</td>
                 <td style="color: #1a73e8; font-weight: bold;">{display_coach}</td>
                 <td style="color: #1a73e8; font-weight: bold;">{display_seat}</td>
-                <td>{text_display}</td>
+                <td>{text}</td>
+                <td>{media_html}</td>
                 <td>{status_html}</td>
             </tr>
             """
     except Exception as e:
-        table_rows = f"<tr><td colspan='11'>Database Error: {e}</td></tr>"
+        table_rows = f"<tr><td colspan='12'>Database Error: {e}</td></tr>"
+    finally:
+        if conn:
+            release_db_connection(conn)
 
     dropdown_options = ""
     for d in departments:
@@ -1072,7 +1092,7 @@ def department_dashboard():
                 .header {{ background: #1a2035; color: white; padding: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }}
                 select {{ padding: 10px; font-size: 16px; border-radius: 5px; cursor: pointer; border: none; outline: none; }}
                 .table-container {{ background: white; padding: 20px; border-radius: 8px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; }}
-                table {{ width: 100%; border-collapse: collapse; text-align: left; min-width: 1000px; }}
+                table {{ width: 100%; border-collapse: collapse; text-align: left; min-width: 1200px; }}
                 th, td {{ padding: 12px; border-bottom: 1px solid #ddd; vertical-align: top; font-size: 14px; }}
                 th {{ background: #f8f9fa; color: #333; position: sticky; top: 0; }}
                 tr:hover {{ background-color: #f1f1f1; }}
@@ -1105,6 +1125,7 @@ def department_dashboard():
                         <th>Coach</th>
                         <th>Seat</th>
                         <th style="width: 20%;">Complaint Details</th>
+                        <th>Evidence</th>
                         <th>Status & Resolution</th>
                     </tr>
                     {table_rows}
