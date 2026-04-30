@@ -18,27 +18,22 @@ const SUPPORTED_LANGUAGES = [
 ];
 
 export function ChatbotCapsule() {
-  // UI States
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
-  // App Modes
   const [chatMode, setChatMode] = useState<'normal' | 'tracking' | 'sos_auth' | 'sos_active'>('normal');
   const [sosId, setSosId] = useState("");
 
-  // Language States
   const [language, setLanguage] = useState("en");
   const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
 
-  // Media Upload States
   const [allowMediaUpload, setAllowMediaUpload] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   
-  // Refs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sessionIdRef = useRef("session-" + Math.random().toString(36).substring(7));
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -93,7 +88,6 @@ export function ChatbotCapsule() {
       });
 
       const data = await response.json();
-      
       setAllowMediaUpload(data.allow_upload || false);
       
       const repliesArray = (data.reply || "").split('<br><br>');
@@ -107,11 +101,7 @@ export function ChatbotCapsule() {
       setMessages(prev => [...prev, ...newMessages]);
     } catch (error) {
       console.error("Chat error:", error);
-      setMessages(prev => [...prev, { 
-        id: Date.now().toString(), 
-        role: 'bot', 
-        text: "AI server connection error. Please try again." 
-      }]);
+      setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: "AI server connection error. Please try again." }]);
     } finally {
       setIsLoading(false);
     }
@@ -147,7 +137,6 @@ export function ChatbotCapsule() {
     }
   };
 
-  // SMART DETECTOR: Checks if the bot is asking for a mobile number
   const isAskingForPhone = messages.length > 0 && messages[messages.length - 1].role === 'bot' && messages[messages.length - 1].text.toLowerCase().includes('mobile number');
   const isTrackingOrPhone = chatMode === 'tracking' || isAskingForPhone;
 
@@ -155,21 +144,20 @@ export function ChatbotCapsule() {
     e.preventDefault();
     if (!message.trim() && !attachmentUrl) return;
 
+    // 🚨 FIX: Capture variables securely BEFORE resetting the input states! 🚨
     const userText = message;
+    const currentAttachmentUrl = attachmentUrl; 
     const displayMessage = message || "Sent an attachment 📎";
     
-    // Clear Input
     setMessage(""); 
     setAttachmentUrl(null);
     setAttachmentName(null);
     setAllowMediaUpload(false); 
     
-    // Show User Message
     setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', text: displayMessage }]);
     setIsLoading(true);
 
     try {
-      // MODE 1: TRACKING
       if (chatMode === 'tracking') {
         const cleanNumber = userText.replace(/\D/g, '');
         if (userText.toLowerCase() === 'cancel') {
@@ -202,8 +190,6 @@ export function ChatbotCapsule() {
         setChatMode('normal'); 
         setIsLoading(false);
       } 
-      
-      // MODE 2: SOS AUTHENTICATION
       else if (chatMode === 'sos_auth') {
         if (userText.toLowerCase() === 'cancel') {
             setChatMode('normal');
@@ -216,8 +202,6 @@ export function ChatbotCapsule() {
         setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: "Complaint ID logged. What is your immediate emergency? (Tactical help will be provided)" }]);
         setIsLoading(false);
       } 
-      
-      // MODE 3: SOS ACTIVE
       else if (chatMode === 'sos_active') {
         const res = await fetch(`${BACKEND_URL}/api/sos`, {
           method: 'POST', 
@@ -228,10 +212,7 @@ export function ChatbotCapsule() {
         setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: "🚨 " + data.reply }]);
         setIsLoading(false);
       } 
-      
-      // MODE 4: NORMAL CHAT
       else {
-        // ENFORCE 10 DIGITS FOR DIALOGFLOW TOO!
         if (isAskingForPhone && userText.toLowerCase() !== 'cancel') {
             const cleanNumber = userText.replace(/\D/g, '');
             if (cleanNumber.length !== 10) {
@@ -242,10 +223,10 @@ export function ChatbotCapsule() {
         }
 
         let finalMessageText = userText;
-        if (attachmentUrl) {
-          finalMessageText += `\n[Evidence: ${attachmentUrl}]`;
+        if (currentAttachmentUrl) {
+          finalMessageText += `\n[Evidence: ${currentAttachmentUrl}]`;
         }
-        await sendMessageToApi(finalMessageText, true, undefined, attachmentUrl); 
+        await sendMessageToApi(finalMessageText, true, undefined, currentAttachmentUrl); 
       }
     } catch (err) {
       setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: "Connection error. Please try again." }]);
@@ -265,7 +246,6 @@ export function ChatbotCapsule() {
           >
             <div className="bg-white rounded-3xl shadow-2xl border border-indigo-100 overflow-hidden flex flex-col h-[560px]">
               
-              {/* Header */}
               <div className={`px-4 py-3.5 flex items-center justify-between shadow-md z-10 transition-colors ${chatMode === 'sos_active' ? 'bg-gradient-to-r from-rose-600 to-red-600' : 'bg-gradient-to-r from-indigo-600 to-blue-600'}`}>
                 <div className="flex items-center gap-3">
                   <div className="relative">
@@ -337,7 +317,6 @@ export function ChatbotCapsule() {
                 </div>
               </div>
 
-              {/* Chat Area */}
               <div className={`flex-1 p-4 overflow-y-auto scroll-smooth ${chatMode === 'sos_active' ? 'bg-rose-50/30' : 'bg-slate-50/50'}`}>
                 
                 {messages.length === 0 && !isLoading && (
@@ -461,7 +440,6 @@ export function ChatbotCapsule() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Input Area */}
               <form 
                 onSubmit={handleSubmit} 
                 className={`p-3 border-t flex flex-col gap-2 transition-colors ${chatMode === 'sos_active' || chatMode === 'sos_auth' ? 'bg-rose-50 border-rose-100' : 'bg-white border-slate-100'}`}
@@ -517,7 +495,6 @@ export function ChatbotCapsule() {
                     }`}
                   />
                   
-                  {/* The Send button is now entirely disabled unless exactly 10 digits are typed! */}
                   <button
                     type="submit"
                     className={`absolute right-1 top-1 bottom-1 aspect-square rounded-full flex items-center justify-center text-white hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${

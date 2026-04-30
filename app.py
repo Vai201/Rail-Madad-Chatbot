@@ -52,77 +52,6 @@ translate_client = translate.Client()
 # 👇 UPDATE THIS TO THE CORRECT BOT PROJECT ID 👇
 DIALOGFLOW_PROJECT_ID = "automation-of-rail-madad"
 
-# --- UTILITY FUNCTIONS ---
-def process_translation(text, target_language):
-    if target_language == 'en':
-        return text
-    try:
-        result = translate_client.translate(text, target_language=target_language)
-        return result['translatedText']
-    except Exception as e:
-        print(f"Translation Error: {e}")
-        return text
-
-def process_passenger_query(phone_number, user_query):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    try:
-        # A. RATE LIMIT CHECK
-        cursor.execute("""
-            SELECT COUNT(*) FROM passenger_queries 
-            WHERE phone_number = %s AND DATE(created_at) = CURRENT_DATE;
-        """, (phone_number,))
-        
-        query_count = cursor.fetchone()[0]
-
-        if query_count >= 4:
-            return "You have reached the daily limit of 4 queries for this contact number. Please try again tomorrow or select 'Register a Complaint' to file a complain."
-
-        # B. THE GUARDRAIL PROMPT
-        strict_prompt = f"""
-        System Context: You are "RailBot", the official AI assistant for Indian Railways. 
-        Your ONLY job is to answer queries related to Indian Railways, stations, trains, PNR rules, and travel guidelines. 
-
-        Strict Rules:
-        1. If the user asks a non-railway question, firmly refuse to answer it.
-        2. IF AND ONLY IF the user mixes a genuine railway question with a non-railway question, answer the railway part, and append exactly this sentence: "Note: I am an official railway assistant and cannot assist with non-railway queries." 
-        3. DO NOT add the warning note if the user's query is 100% about railways.
-        4. Keep answers concise, helpful, and polite.
-        5. FORMATTING: Do NOT use markdown symbols like **bold**, *italics*, or # headers. Use plain text only. Separate steps or lists with a double line break so they are easy to read in a chat window.
-
-        User's Query: "{user_query}"
-        """
-
-        # C. CALL GEMINI
-        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview') 
-        response = model.generate_content(strict_prompt)
-        ai_response_text = response.text
-
-        # D. LOG THE SUCCESSFUL QUERY IN DATABASE
-        cursor.execute("""
-            INSERT INTO passenger_queries (phone_number, user_query, ai_response) 
-            VALUES (%s, %s, %s);
-        """, (phone_number, user_query, ai_response_text))
-        conn.commit()
-
-        return ai_response_text
-
-    except Exception as e:
-        conn.rollback()
-        print(f"Database/AI Error: {e}")
-        return "I am currently experiencing high network traffic. Please try your query again in a few moments."
-
-    finally:
-        cursor.close()
-        release_db_connection(conn)
-
-# --- 1. Define Paths & Cloud DB Credentials ---
-project_root = os.path.abspath(os.path.dirname(__file__))
-
-pnr_file_path = os.path.join(project_root, 'data', 'pnr_database.csv')
-stations_file_path = os.path.join(project_root, 'data', 'stations_original.csv')
-
 # --- 2. RUN DATABASE SETUP ---
 def setup_database():
     try:
@@ -157,11 +86,11 @@ def setup_database():
         );
         ''')
         
-        # Safely holds media URLs while Dialogflow processes the text
         cursor.execute('''
-        CREATE TABLE IF NOT EXISTS session_media (
-            session_id TEXT PRIMARY KEY,
-            media_url TEXT
+        CREATE TABLE IF NOT EXISTS pnr_records (
+            pnr_number TEXT PRIMARY KEY,
+            train_no TEXT,
+            date_of_travel TEXT
         );
         ''')
         
@@ -176,17 +105,12 @@ def setup_database():
         cursor.execute("ALTER TABLE bot_complaints ADD COLUMN IF NOT EXISTS sos_logs TEXT DEFAULT '';")
         conn.commit()
         release_db_connection(conn)
-        print("✅ Cloud Database schema verified.")
+        print("✅ Cloud Database schema verified & Session Media Table Created.")
         cleanup_old_complaints()
     except Exception as e:
         print(f"❌ ERROR setting up database: {e}")
-        
+
 def cleanup_old_complaints():
-    # FORCE DB SETUP ON STARTUP
-    try:
-        setup_database()
-    except:
-        pass
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -208,6 +132,79 @@ def cleanup_old_complaints():
             
     except Exception as e:
         print(f"❌ ERROR during automated database cleanup: {e}")
+
+# 🚨 FORCE DB SETUP ON STARTUP 🚨
+try:
+    setup_database()
+except:
+    pass
+
+# --- UTILITY FUNCTIONS ---
+def process_translation(text, target_language):
+    if target_language == 'en':
+        return text
+    try:
+        result = translate_client.translate(text, target_language=target_language)
+        return result['translatedText']
+    except Exception as e:
+        print(f"Translation Error: {e}")
+        return text
+
+def process_passenger_query(phone_number, user_query):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        cursor.execute("""
+            SELECT COUNT(*) FROM passenger_queries 
+            WHERE phone_number = %s AND DATE(created_at) = CURRENT_DATE;
+        """, (phone_number,))
+        
+        query_count = cursor.fetchone()[0]
+
+        if query_count >= 4:
+            return "You have reached the daily limit of 4 queries for this contact number. Please try again tomorrow or select 'Register a Complaint' to file a complain."
+
+        strict_prompt = f"""
+        System Context: You are "RailBot", the official AI assistant for Indian Railways. 
+        Your ONLY job is to answer queries related to Indian Railways, stations, trains, PNR rules, and travel guidelines. 
+
+        Strict Rules:
+        1. If the user asks a non-railway question, firmly refuse to answer it.
+        2. IF AND ONLY IF the user mixes a genuine railway question with a non-railway question, answer the railway part, and append exactly this sentence: "Note: I am an official railway assistant and cannot assist with non-railway queries." 
+        3. DO NOT add the warning note if the user's query is 100% about railways.
+        4. Keep answers concise, helpful, and polite.
+        5. FORMATTING: Do NOT use markdown symbols like **bold**, *italics*, or # headers. Use plain text only. Separate steps or lists with a double line break so they are easy to read in a chat window.
+
+        User's Query: "{user_query}"
+        """
+
+        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview') 
+        response = model.generate_content(strict_prompt)
+        ai_response_text = response.text
+
+        cursor.execute("""
+            INSERT INTO passenger_queries (phone_number, user_query, ai_response) 
+            VALUES (%s, %s, %s);
+        """, (phone_number, user_query, ai_response_text))
+        conn.commit()
+
+        return ai_response_text
+
+    except Exception as e:
+        conn.rollback()
+        print(f"Database/AI Error: {e}")
+        return "I am currently experiencing high network traffic. Please try your query again in a few moments."
+
+    finally:
+        cursor.close()
+        release_db_connection(conn)
+
+# --- 1. Define Paths & Cloud DB Credentials ---
+project_root = os.path.abspath(os.path.dirname(__file__))
+
+pnr_file_path = os.path.join(project_root, 'data', 'pnr_database.csv')
+stations_file_path = os.path.join(project_root, 'data', 'stations_original.csv')
 
 # --- 3. Load Data at Startup ---
 station_data_raw = None
@@ -418,7 +415,9 @@ def handle_pnr_verification(request_json):
         return {"fulfillmentText": "We are experiencing a database connection issue. Please type 'hi' to restart."}
 
 def syntax_router(text):
+    import re
     text = text.lower()
+    
     mapping = {
         "Sanitation & Cleaning": [r'\bdirty\b', r'\btoilet\b', r'\bwashroom\b', r'\bcleaning\b', r'\bfilthy\b', r'\bstink\b', r'\bgarbage\b'],
         "Catering & Food": [r'\bfood\b', r'\bpantry\b', r'\bovercharged\b', r'\bmeal\b', r'\bcatering\b', r'\bbad food\b', r'\bwater bottle\b'],
@@ -428,6 +427,7 @@ def syntax_router(text):
         "Staff Behavior": [r'\brude\b', r'\bstaff\b', r'\bunprofessional\b', r'\bbehavior\b', r'\bshouting\b'],
         "Water Supply": [r'\bno water\b', r'\btap\b', r'\bdry\b', r'\bwater supply\b']
     }
+    
     for dept, patterns in mapping.items():
         for pattern in patterns:
             if re.search(pattern, text):
@@ -453,6 +453,9 @@ def categorize_complaint(complaint_text):
     return "General", ""
 
 def neural_router(complaint_text):
+    import json
+    import re
+    
     valid_departments = [
         "Security", "Medical Assistance", "Sanitation & Cleaning", 
         "Maintenance & Electrical", "General" 
@@ -476,6 +479,7 @@ def neural_router(complaint_text):
     
     try:
         model = genai.GenerativeModel('models/gemma-3-27b-it')
+        
         safety_settings = [
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -556,6 +560,7 @@ def get_random_closing_statement(dept):
     }
     if dept in ["Water Supply", "Maintenance & Electrical"]:
         return random.choice(statements["Sanitation & Cleaning"])
+    
     return random.choice(statements.get(dept, statements["Default"]))
 
 def handle_complaint_logging(request_json):
@@ -578,7 +583,7 @@ def handle_complaint_logging(request_json):
                 cursor.execute("DELETE FROM session_media WHERE session_id = %s", (session_id,))
         except Exception as e:
             print(f"Error fetching media URL from DB: {e}")
-            conn.rollback() # Rollback just this tiny error, but keep going!
+            conn.rollback() 
 
         # 3. Extract Dialogflow parameters
         parameters = request_json['queryResult'].get('parameters', {})
@@ -630,7 +635,7 @@ def handle_complaint_logging(request_json):
         )
         new_id = cursor.fetchone()[0]
         
-        # 6. COMMIT the entire transaction (URL removal + Complaint Insert)
+        # 6. COMMIT the entire transaction 
         conn.commit()
 
         base_msg = f"Complaint registered (ID: C-{new_id}) routed to {dept} ({agency})."
@@ -657,11 +662,10 @@ def handle_complaint_logging(request_json):
     except Exception as e:
         print(f"Error in complaint logging: {e}")
         if conn:
-            conn.rollback() # Failsafe
+            conn.rollback() 
         return {"fulfillmentText": "Sorry, there was an error lodging your complaint. Please try again."}
     
     finally:
-        # ALWAYS release the database connection safely!
         if conn:
             release_db_connection(conn)
 
@@ -686,12 +690,25 @@ def webhook():
         parameters = req.get('queryResult', {}).get('parameters', {})
         phone = parameters.get('phone_number')
         query_text = parameters.get('user_query')
+        
         final_response = process_passenger_query(phone, query_text)
         
         return jsonify({
             "fulfillmentMessages": [
                 {"text": {"text": [final_response]}},
-                {"payload": {"richContent": [[{"type": "chips","options": [{"text": "Ask Another Query"},{"text": "Register a Complaint"}]}]]}}
+                {
+                    "payload": {
+                        "richContent": [[
+                            {
+                                "type": "chips",
+                                "options": [
+                                    {"text": "Ask Another Query"},
+                                    {"text": "Register a Complaint"}
+                                ]
+                            }
+                        ]]
+                    }
+                }
             ]
         })
 
@@ -701,7 +718,19 @@ def webhook():
             "fulfillmentMessages": [
                 {"text": {"text": ["You are very welcome! Have a safe journey."]}},
                 {"text": {"text": ["Welcome to Rail Madad, please select any one:"]}},
-                {"payload": {"richContent": [[{"type": "chips","options": [{"text": "Register a Complaint"},{"text": "Query"}]}]]}}
+                {
+                    "payload": {
+                        "richContent": [[
+                            {
+                                "type": "chips",
+                                "options": [
+                                    {"text": "Register a Complaint"},
+                                    {"text": "Query"}
+                                ]
+                            }
+                        ]]
+                    }
+                }
             ],
             "outputContexts": [
                 {"name": f"{session_id}/contexts/awaiting-location", "lifespanCount": 0},
@@ -720,18 +749,18 @@ def chat_proxy():
     selected_language = data.get('language', 'en')
     session_id = data.get('session_id', 'default-session')
     
-    # 1. Grab the media_url directly from the React frontend JSON
     media_url = data.get('media_url')
     
     try:
-        # 2. Strip the [Evidence: URL] tag out of the text so Google Translate/Dialogflow don't crash
-        user_message = re.sub(r'\n?\[Evidence:\s*https?://[^\]]+\]', '', user_message).strip()
+        url_match = re.search(r'\[Evidence:\s*(https?://[^\s\]]+)\]', user_message)
+        if url_match:
+            if not media_url:
+                media_url = url_match.group(1)
+            user_message = user_message.replace(url_match.group(0), '').strip()
 
-        # 3. If user just uploaded a photo and sent no text, give Dialogflow dummy text to read
-        if not user_message and media_url:
-            user_message = "I have attached a photo as evidence for my complaint."
+        if media_url and str(media_url).strip().lower() == 'none':
+            media_url = None
 
-        # 4. Store URL in DB immediately so the webhook can find it later
         if media_url:
             conn = get_db_connection()
             cursor = conn.cursor()
@@ -743,7 +772,9 @@ def chat_proxy():
             conn.commit()
             release_db_connection(conn)
 
-        # 5. Safely translate the pure text
+        if not user_message and media_url:
+            user_message = "I have attached a photo as evidence for my complaint."
+
         english_input = process_translation(user_message, 'en')
         
         session_client = dialogflow.SessionsClient()
@@ -824,6 +855,7 @@ def track_by_phone():
             comp_id = row[0]
             dept = row[1]
             closing_statement = get_random_closing_statement(dept)
+            
             cursor.execute("""
                 UPDATE bot_complaints 
                 SET status = 'Closed', closing_statement = %s 
@@ -910,18 +942,16 @@ def get_db_as_html_table(query):
         
         if df.empty: return "<p>No records found.</p>"
         
-        # Transforms URL into a clickable link in an 'Evidence' column where the text is the C-ID!
         if 'media_url' in df.columns and 'complaint_id' in df.columns:
             df['Evidence'] = df.apply(
                 lambda row: f'<a href="{row["media_url"]}" target="_blank" style="color:#1a73e8; font-weight:bold; text-decoration:underline;">C-{row["complaint_id"]}</a>' 
-                if pd.notna(row["media_url"]) and str(row["media_url"]).strip() != "" else "None", 
+                if pd.notna(row["media_url"]) and str(row["media_url"]).strip() != "" and str(row["media_url"]).strip().lower() != "none" else "None", 
                 axis=1
             )
             idx = df.columns.get_loc('media_url')
             df.insert(idx, 'Evidence', df.pop('Evidence'))
             df = df.drop(columns=['media_url'])
 
-        # Escape=False stops pandas from converting HTML tags to raw text
         return df.to_html(index=False, border=0, classes="table", escape=False)
     except Exception as e:
         return f"<p>Error reading database: {e}</p>"
@@ -984,7 +1014,7 @@ def admin_dashboard():
 
 @app.route('/view-complaints')
 def view_complaints():
-    query = "SELECT complaint_id, timestamp, phone_number, pnr, token, station, travel_date, complaint_text, department, agency, status, closing_statement, media_url, sos_logs FROM bot_complaints ORDER BY timestamp DESC"
+    query = "SELECT complaint_id, timestamp, phone_number, pnr, token, station, travel_date, complaint_text, department, agency, media_url, status, closing_statement, sos_logs FROM bot_complaints ORDER BY timestamp DESC"
     return get_page_template("Master Complaints Log", get_db_as_html_table(query))
 
 @app.route('/view-pnrs')
@@ -1046,9 +1076,9 @@ def department_dashboard():
             date_display = travel_date if travel_date else "N/A"
             station_display = station if station else "Not Provided"
             
-            # --- THE NEW CLICKABLE EVIDENCE COLUMN LOGIC ---
+            # 🚨 FIX: Display Complaint ID as clickable link! 🚨
             media_html = "None"
-            if media_url:
+            if media_url and str(media_url).strip().lower() != 'none':
                 media_html = f'<a href="{media_url}" target="_blank" style="color:#1a73e8; font-weight:bold; text-decoration:underline;">C-{comp_id}</a>'
             
             status_color = "green" if status == "Closed" else "orange"
@@ -1075,8 +1105,7 @@ def department_dashboard():
     except Exception as e:
         table_rows = f"<tr><td colspan='12'>Database Error: {e}</td></tr>"
     finally:
-        if conn:
-            release_db_connection(conn)
+        if conn: release_db_connection(conn)
 
     dropdown_options = ""
     for d in departments:
