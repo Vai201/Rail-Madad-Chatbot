@@ -18,13 +18,13 @@ const SUPPORTED_LANGUAGES = [
 ];
 
 export function ChatbotCapsule() {
-  // UI States (Cleaned up duplicates)
+  // UI States
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
-  // App Modes (Bypasses Dialogflow for Tracking & SOS)
+  // App Modes
   const [chatMode, setChatMode] = useState<'normal' | 'tracking' | 'sos_auth' | 'sos_active'>('normal');
   const [sosId, setSosId] = useState("");
 
@@ -45,7 +45,6 @@ export function ChatbotCapsule() {
 
   const currentLangLabel = SUPPORTED_LANGUAGES.find(l => l.code === language)?.label || 'English';
 
-  // Auto-scroll to bottom of chat
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -54,7 +53,6 @@ export function ChatbotCapsule() {
     scrollToBottom();
   }, [messages, isLoading]);
 
-  // --- THE MAGIC LINK: Listens for the Navbar Button Click ---
   useEffect(() => {
     const handleRemoteTracking = () => {
       setIsOpen(true);
@@ -66,7 +64,6 @@ export function ChatbotCapsule() {
     return () => window.removeEventListener('open-railbot-tracking', handleRemoteTracking);
   }, []);
 
-  // Handle Changing Language
   const handleLanguageChange = (newLang: string) => {
     setLanguage(newLang);
     setMessages([]); 
@@ -74,7 +71,6 @@ export function ChatbotCapsule() {
     sessionIdRef.current = "session-" + Math.random().toString(36).substring(7);
   };
 
-  // Standard Dialogflow Chat Function (Updated with mediaUrl)
   const sendMessageToApi = async (text: string, isHiddenInit = false, overrideLang?: string, mediaUrl?: string | null) => {
     if (!text.trim() && !mediaUrl) return;
 
@@ -92,22 +88,19 @@ export function ChatbotCapsule() {
             "message": text, 
             "language": overrideLang || language,
             "session_id": sessionIdRef.current,
-            "media_url": mediaUrl || null // Successfully passes the URL to Flask
+            "media_url": mediaUrl || null 
         })
       });
 
       const data = await response.json();
       
-      // Unlock the upload button ONLY if Dialogflow says it is time!
       setAllowMediaUpload(data.allow_upload || false);
       
-      // Split the text by the <br><br> tags so each part becomes its own chat bubble
       const repliesArray = (data.reply || "").split('<br><br>');
       const newMessages = repliesArray.map((replyText: string, index: number) => ({
         id: Date.now().toString() + "-" + index,
         role: 'bot' as const,
         text: replyText,
-        // Only attach the buttons to the very LAST chat bubble
         buttons: index === repliesArray.length - 1 ? data.buttons : undefined
       }));
 
@@ -124,7 +117,6 @@ export function ChatbotCapsule() {
     }
   };
 
-  // Direct File Upload to Google Cloud Storage
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -155,7 +147,10 @@ export function ChatbotCapsule() {
     }
   };
 
-  // THE MASTER INTERCEPTOR: Handles Normal Chat, SOS, and Tracking
+  // SMART DETECTOR: Checks if the bot is asking for a mobile number
+  const isAskingForPhone = messages.length > 0 && messages[messages.length - 1].role === 'bot' && messages[messages.length - 1].text.toLowerCase().includes('mobile number');
+  const isTrackingOrPhone = chatMode === 'tracking' || isAskingForPhone;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim() && !attachmentUrl) return;
@@ -184,7 +179,7 @@ export function ChatbotCapsule() {
             return;
         }
         if (cleanNumber.length !== 10) {
-            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: "That doesn't look like a valid 10-digit number. Please try again, or type 'cancel' to exit." }]);
+            setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: "⚠️ That doesn't look like a valid 10-digit number. Please try again, or type 'cancel' to exit." }]);
             setIsLoading(false);
             return;
         }
@@ -222,7 +217,7 @@ export function ChatbotCapsule() {
         setIsLoading(false);
       } 
       
-      // MODE 3: SOS ACTIVE (Direct to LLM, bypass Dialogflow)
+      // MODE 3: SOS ACTIVE
       else if (chatMode === 'sos_active') {
         const res = await fetch(`${BACKEND_URL}/api/sos`, {
           method: 'POST', 
@@ -234,13 +229,22 @@ export function ChatbotCapsule() {
         setIsLoading(false);
       } 
       
-      // MODE 4: NORMAL DIALOGFLOW CHAT
+      // MODE 4: NORMAL CHAT
       else {
+        // ENFORCE 10 DIGITS FOR DIALOGFLOW TOO!
+        if (isAskingForPhone && userText.toLowerCase() !== 'cancel') {
+            const cleanNumber = userText.replace(/\D/g, '');
+            if (cleanNumber.length !== 10) {
+                setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: "⚠️ Please enter exactly 10 digits. (Or type 'cancel' to exit)." }]);
+                setIsLoading(false);
+                return;
+            }
+        }
+
         let finalMessageText = userText;
         if (attachmentUrl) {
           finalMessageText += `\n[Evidence: ${attachmentUrl}]`;
         }
-        // Properly pass the attachmentUrl to the API function
         await sendMessageToApi(finalMessageText, true, undefined, attachmentUrl); 
       }
     } catch (err) {
@@ -279,7 +283,6 @@ export function ChatbotCapsule() {
                 </div>
                 
                 <div className="flex items-center gap-2">
-                  {/* Language Selector */}
                   <div className="relative">
                     <button 
                       onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
@@ -337,7 +340,6 @@ export function ChatbotCapsule() {
               {/* Chat Area */}
               <div className={`flex-1 p-4 overflow-y-auto scroll-smooth ${chatMode === 'sos_active' ? 'bg-rose-50/30' : 'bg-slate-50/50'}`}>
                 
-                {/* 🌟 THE DASHBOARD MENU (Only shows when chat is empty) */}
                 {messages.length === 0 && !isLoading && (
                    <div className="flex flex-col items-center justify-center py-6 animate-in fade-in zoom-in duration-500">
                       <div className="size-16 bg-indigo-100 rounded-full flex items-center justify-center text-3xl mb-3 shadow-inner">👋</div>
@@ -392,7 +394,6 @@ export function ChatbotCapsule() {
                    </div>
                 )}
 
-                {/* The Chat Bubbles */}
                 {messages.map((msg, index) => {
                   const isLastMessage = index === messages.length - 1;
                   const isEmergency = msg.text.includes('🚨');
@@ -411,7 +412,6 @@ export function ChatbotCapsule() {
                       )}
                       
                       <div className={`max-w-[85%] flex flex-col gap-1.5 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                        {/* THE BUBBLE ITSELF (Handles HTML via dangerouslySetInnerHTML) */}
                         <div 
                           className={`px-4 py-2.5 text-sm shadow-sm leading-relaxed rounded-2xl ${
                             msg.role === 'user' 
@@ -423,7 +423,6 @@ export function ChatbotCapsule() {
                           dangerouslySetInnerHTML={{ __html: msg.text }}
                         />
 
-                        {/* Interactive Chip Buttons */}
                         {msg.role === 'bot' && msg.buttons && msg.buttons.length > 0 && isLastMessage && (
                           <div className="flex flex-wrap gap-2 mt-1">
                             {msg.buttons.map((btn, i) => (
@@ -468,7 +467,6 @@ export function ChatbotCapsule() {
                 className={`p-3 border-t flex flex-col gap-2 transition-colors ${chatMode === 'sos_active' || chatMode === 'sos_auth' ? 'bg-rose-50 border-rose-100' : 'bg-white border-slate-100'}`}
               >
                 
-                {/* Attachment Preview Bubble */}
                 {attachmentName && (
                   <div className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg text-xs font-medium w-fit border border-indigo-100">
                     <Paperclip className="size-3.5" />
@@ -480,7 +478,6 @@ export function ChatbotCapsule() {
                 )}
 
                 <div className="flex gap-2 relative items-center">
-                  {/* Hidden File Input */}
                   <input 
                     type="file" 
                     ref={fileInputRef}
@@ -489,7 +486,6 @@ export function ChatbotCapsule() {
                     className="hidden" 
                   />
                   
-                  {/* The Dynamic Upload Button (Only in Normal Chat) */}
                   {allowMediaUpload && chatMode === 'normal' && (
                     <button
                       type="button"
@@ -502,20 +498,18 @@ export function ChatbotCapsule() {
                     </button>
                   )}
 
-                  {/* Restrict input dynamically */}
                   <input
-                    type={chatMode === 'tracking' ? "tel" : "text"}
+                    type={isTrackingOrPhone ? "tel" : "text"}
                     value={message}
                     onChange={(e) => {
-                      if (chatMode === 'tracking') {
-                        // Force only numbers and max 10 digits for tracking
+                      if (isTrackingOrPhone) {
                         const onlyNums = e.target.value.replace(/\D/g, '');
                         if (onlyNums.length <= 10) setMessage(onlyNums);
                       } else {
                         setMessage(e.target.value);
                       }
                     }}
-                    placeholder={chatMode === 'sos_active' ? "Describe your emergency..." : chatMode === 'tracking' ? "Enter 10-digit number..." : allowMediaUpload ? "Describe issue & attach photo..." : "Type your message..."}
+                    placeholder={chatMode === 'sos_active' ? "Describe your emergency..." : isTrackingOrPhone ? "Enter 10-digit number..." : allowMediaUpload ? "Describe issue & attach photo..." : "Type your message..."}
                     className={`flex-1 pl-4 pr-12 py-3 rounded-full border focus:outline-none focus:ring-2 text-sm transition-all shadow-inner ${
                       chatMode === 'sos_active' || chatMode === 'sos_auth' 
                         ? 'bg-white border-rose-200 focus:ring-rose-500/20 focus:border-rose-500' 
@@ -523,6 +517,7 @@ export function ChatbotCapsule() {
                     }`}
                   />
                   
+                  {/* The Send button is now entirely disabled unless exactly 10 digits are typed! */}
                   <button
                     type="submit"
                     className={`absolute right-1 top-1 bottom-1 aspect-square rounded-full flex items-center justify-center text-white hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
@@ -530,7 +525,12 @@ export function ChatbotCapsule() {
                         ? 'bg-gradient-to-br from-rose-600 to-red-600'
                         : 'bg-gradient-to-br from-indigo-600 to-blue-600'
                     }`}
-                    disabled={(!message.trim() && !attachmentUrl) || isLoading || isUploading}
+                    disabled={
+                      (!message.trim() && !attachmentUrl) || 
+                      isLoading || 
+                      isUploading || 
+                      (isTrackingOrPhone && message.toLowerCase() !== 'cancel' && message.replace(/\D/g, '').length !== 10)
+                    }
                   >
                     <Send className="size-4" />
                   </button>
@@ -541,7 +541,6 @@ export function ChatbotCapsule() {
         )}
       </AnimatePresence>
 
-      {/* Floating Action Button */}
       <motion.button
         onClick={() => setIsOpen(!isOpen)}
         className="relative group"

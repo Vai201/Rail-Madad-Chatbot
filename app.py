@@ -166,6 +166,15 @@ def setup_database():
             date_of_travel TEXT
         );
         ''')
+        
+        # FIX: Added session_media table to securely hold the URL 
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS session_media (
+            session_id TEXT PRIMARY KEY,
+            media_url TEXT
+        );
+        ''')
+        
         cursor.execute("ALTER TABLE bot_complaints ADD COLUMN IF NOT EXISTS sos_logs TEXT DEFAULT '';")
         conn.commit()
         release_db_connection(conn)
@@ -514,6 +523,7 @@ def neural_router(complaint_text):
         print(f"CRITICAL GEMINI ERROR: {e}")
         return "General", ""
 
+# YOUR ORIGINAL FUNCTION KEPT INTACT!
 def get_agency_name(pnr_str):
     try:
         pnr_num = int(re.search(r'\d+', pnr_str).group())
@@ -564,20 +574,26 @@ def get_random_closing_statement(dept):
 def handle_complaint_logging(request_json):
     try:
         session_path = request_json.get('session', '')
+        # Extract the pure Session ID to retrieve the URL safely
+        session_id = session_path.split('/')[-1]
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # --- FIX: GRAB THE URL FROM THE SECURE DB TABLE ---
+        media_url = None
+        cursor.execute("SELECT media_url FROM session_media WHERE session_id = %s", (session_id,))
+        row = cursor.fetchone()
+        if row:
+            media_url = row[0]
+            # Clean up the memory table
+            cursor.execute("DELETE FROM session_media WHERE session_id = %s", (session_id,))
         
         parameters = request_json['queryResult'].get('parameters', {})
         complaint_text = parameters.get('complaint_text', '')
         
         if not complaint_text:
             complaint_text = request_json['queryResult'].get('queryText', '')
-
-        # --- NEW ROBUST URL EXTRACTION (Survives Gunicorn Workers!) ---
-        media_url = None
-        url_match = re.search(r'\[Evidence:\s*(https?://[^\s\]]+)\]', complaint_text)
-        if url_match:
-            media_url = url_match.group(1)
-            # Strip it from the text so it doesn't show up in the main complaint text field
-            complaint_text = re.sub(r'\n?\[Evidence:\s*https?://[^\]]+\]', '', complaint_text).strip()
 
         pnr = ""
         token = ""
@@ -625,8 +641,7 @@ def handle_complaint_logging(request_json):
         status = "Open"
         closing_msg = "" 
 
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        # Insert everything securely into the master log
         cursor.execute(
             """INSERT INTO bot_complaints 
                (phone_number, pnr, token, station, travel_date, complaint_text, department, agency, status, closing_statement, media_url) 
@@ -753,12 +768,28 @@ def chat_proxy():
     user_message = data.get('message', '')
     selected_language = data.get('language', 'en')
     session_id = data.get('session_id', 'default-session')
+    media_url = data.get('media_url')
     
     try:
-        # NOTE: We deleted the broken ghost_media_storage memory cache here.
-        # We are intentionally letting the [Evidence: https...] tag pass straight 
-        # into Dialogflow so that the handle_complaint_logging webhook can grab it.
+        # --- FIX: STORE URL IN DB IMMEDIATELY ---
+        if media_url:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO session_media (session_id, media_url)
+                VALUES (%s, %s)
+                ON CONFLICT (session_id) DO UPDATE SET media_url = EXCLUDED.media_url;
+            """, (session_id, media_url))
+            conn.commit()
+            release_db_connection(conn)
+
+        # Strip URL tag out so Google Translate and Dialogflow NLP don't crash
+        user_message = re.sub(r'\n?\[Evidence:\s*https?://[^\]]+\]', '', user_message).strip()
         
+        # CRITICAL: If user just uploaded a photo and sent no text, give Dialogflow something to read!
+        if not user_message and media_url:
+            user_message = "I have attached a photo as evidence for my complaint."
+
         english_input = process_translation(user_message, 'en')
         
         session_client = dialogflow.SessionsClient()
@@ -931,32 +962,32 @@ def get_db_as_html_table(query):
         if df.empty:
             return "<p>No records found in this database table.</p>"
             
-        # THE FIX FOR SOS LOGS: Added escape=False to stop Pandas from breaking HTML tags!
-        return df.to_html(index=False, border=1, classes="table table-striped", escape=False)
+        # FIX: Escape=False stops pandas from converting HTML tags to raw text
+        return df.to_html(index=False, border=0, classes="table", escape=False)
     except Exception as e:
-        return f"<p>Error reading database: {e}. (The table may be empty.)</p>"
+        return f"<p>Error reading database: {e}</p>"
 
 def get_page_template(title, table_html):
+    # CSS Upgraded to match the modern RBAC portal style!
     return f"""
     <html>
         <head>
             <title>{title}</title>
             <style>
-                body {{ font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; }}
-                h1 {{ color: #333; }}
-                .table-container {{ overflow-x: auto; width: 100%; border: 1px solid #ddd; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }}
-                .table {{ width: 100%; border-collapse: collapse; margin-top: 0; white-space: nowrap; }}
-                .table th, .table td {{ padding: 12px 16px; text-align: left; border-bottom: 1px solid #ddd; }}
-                .table th {{ background-color: #1a73e8; color: white; position: sticky; top: 0; z-index: 10; }}
-                .table tr:nth-child(even) {{ background-color: #f8f9fa; }}
-                .table tr:hover {{ background-color: #f1f1f1; }}
-                a {{ font-size: 1.2em; color: #1a73e8; text-decoration: none; display: inline-block; margin-bottom: 15px; }}
-                a:hover {{ text-decoration: underline; }}
+                body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f9; padding: 20px; }}
+                h1 {{ color: #1a2035; margin-bottom: 5px; }}
+                .table-container {{ background: white; padding: 20px; border-radius: 8px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; }}
+                table {{ width: 100%; border-collapse: collapse; text-align: left; min-width: 1000px; }}
+                th, td {{ padding: 12px; border-bottom: 1px solid #ddd; vertical-align: top; font-size: 14px; }}
+                th {{ background: #f8f9fa; color: #333; position: sticky; top: 0; font-weight: 600; }}
+                tr:hover {{ background-color: #f1f1f1; }}
+                a.btn {{ font-size: 14px; color: #1a73e8; text-decoration: none; font-weight: bold; display: inline-block; margin-bottom: 15px; background: white; padding: 8px 16px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e0e0e0; }}
+                a.btn:hover {{ background: #f8f9fa; }}
             </style>
         </head>
         <body>
             <h1>{title}</h1>
-            <p><a href="/admin">⬅ Back to Admin Dashboard</a></p>
+            <a href="/admin" class="btn">⬅ Back to Admin Dashboard</a>
             <div class="table-container">
                 {table_html}
             </div>
@@ -968,17 +999,27 @@ def get_page_template(title, table_html):
 def admin_dashboard():
     return """
     <html>
-        <head><title>Admin Dashboard</title></head>
-        <body style="font-family: Arial, sans-serif; padding: 30px;">
-            <h1>Rail Madad Admin Dashboard</h1>
-            <p>Select a database to view:</p>
-            <ul>
-                <li><a href="/department-dashboard" style="font-size: 1.5em; color: #d93025; font-weight: bold;">🔒 Secure Department Portal (RBAC Demo)</a></li>
-                <br>
-                <li><a href="/view-complaints" style="font-size: 1.5em;">View Master Complaints Log</a></li>
-                <li><a href="/view-pnrs" style="font-size: 1.5em;">View PNR Database (Sample)</a></li>
-                <li><a href="/view-stations" style="font-size: 1.5em;">View Station Database (Sample)</a></li>
-            </ul>
+        <head>
+            <title>Admin Dashboard</title>
+            <style>
+                body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f9; padding: 40px; display: flex; flex-direction: column; align-items: center; }
+                .card { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 15px rgba(0,0,0,0.05); text-align: center; max-width: 600px; width: 100%; }
+                h1 { color: #1a2035; margin-bottom: 30px; }
+                a { display: block; padding: 15px 20px; margin-bottom: 15px; border-radius: 8px; text-decoration: none; font-weight: bold; font-size: 18px; transition: all 0.2s; }
+                .portal-btn { background: #d93025; color: white; border: 2px solid #d93025; }
+                .portal-btn:hover { background: #b3261d; box-shadow: 0 4px 8px rgba(217,48,37,0.3); }
+                .standard-btn { background: white; color: #1a73e8; border: 2px solid #1a73e8; }
+                .standard-btn:hover { background: #f4f8fe; box-shadow: 0 4px 8px rgba(26,115,232,0.2); }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <h1>Rail Madad Admin Center</h1>
+                <a href="/department-dashboard" class="portal-btn">🔒 Secure Department Portal (RBAC)</a>
+                <a href="/view-complaints" class="standard-btn">View Master Complaints Log</a>
+                <a href="/view-pnrs" class="standard-btn">View PNR Database</a>
+                <a href="/view-stations" class="standard-btn">View Station Database</a>
+            </div>
         </body>
     </html>
     """
@@ -986,22 +1027,20 @@ def admin_dashboard():
 @app.route('/view-complaints')
 def view_complaints():
     query = "SELECT * FROM bot_complaints ORDER BY timestamp DESC"
-    table_html = get_db_as_html_table(query)
-    return get_page_template("Complaints Log", table_html)
+    return get_page_template("Master Complaints Log", get_db_as_html_table(query))
 
 @app.route('/view-pnrs')
 def view_pnrs():
     query = "SELECT * FROM pnr_records LIMIT 100"
     table_html = get_db_as_html_table(query)
-    if "No complaints found" in table_html or "error" in table_html.lower():
-        table_html = "<p>No PNR records found. Please import your CSV into the 'pnr_records' table in Cloud SQL.</p>"
-    return get_page_template("PNR Database (SQL Cloud Storage)", table_html)
+    if "No records found" in table_html or "Error" in table_html:
+        table_html = "<p>No PNR records found. Please import your CSV into Cloud SQL.</p>"
+    return get_page_template("PNR Database Ledger", table_html)
 
 @app.route('/view-stations')
 def view_stations():
     query = "SELECT * FROM stations LIMIT 100" 
-    table_html = get_db_as_html_table(query)
-    return get_page_template("Station Database (First 100 Rows)", table_html)
+    return get_page_template("Station Database Registry", get_db_as_html_table(query))
 
 @app.route('/department-dashboard')
 def department_dashboard():
@@ -1087,11 +1126,13 @@ def department_dashboard():
             <style>
                 body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f9; padding: 20px; }}
                 .header {{ background: #1a2035; color: white; padding: 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }}
-                select {{ padding: 10px; font-size: 16px; border-radius: 5px; cursor: pointer; }}
+                select {{ padding: 10px; font-size: 16px; border-radius: 5px; cursor: pointer; border: none; outline: none; }}
                 .table-container {{ background: white; padding: 20px; border-radius: 8px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; }}
                 table {{ width: 100%; border-collapse: collapse; text-align: left; min-width: 1000px; }}
-                th, td {{ padding: 12px; border-bottom: 1px solid #ddd; vertical-align: top; }}
+                th, td {{ padding: 12px; border-bottom: 1px solid #ddd; vertical-align: top; font-size: 14px; }}
                 th {{ background: #f8f9fa; color: #333; position: sticky; top: 0; }}
+                tr:hover {{ background-color: #f1f1f1; }}
+                a.btn {{ font-size: 14px; color: #1a73e8; text-decoration: none; font-weight: bold; display: inline-block; margin-top: 20px; background: white; padding: 8px 16px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e0e0e0; }}
             </style>
         </head>
         <body>
@@ -1100,7 +1141,7 @@ def department_dashboard():
                     <h1 style="margin:0;">🔒 Secure Department Portal</h1>
                     <p style="margin:5px 0 0 0; color: #aaa;">Role-Based Access Control (RBAC) & Dynamic Data Masking</p>
                 </div>
-                <form method="GET" action="/department-dashboard">
+                <form method="GET" action="/department-dashboard" style="margin:0;">
                     <select name="dept" onchange="this.form.submit()">
                         {dropdown_options}
                     </select>
@@ -1125,8 +1166,7 @@ def department_dashboard():
                     {table_rows}
                 </table>
             </div>
-            <br>
-            <a href="/admin" style="color: #1a73e8; text-decoration: none;">⬅ Back to Master Admin</a>
+            <a href="/admin" class="btn">⬅ Back to Master Admin</a>
         </body>
     </html>
     """
@@ -1225,7 +1265,7 @@ def handle_sos():
         ai_reply = response.text
         
         # 5. LOG THE INTERACTION FOR THE ADMINS
-        new_log = f"User: {user_message}<br>AI: {ai_reply}<br><hr>"
+        new_log = f"<b>User:</b> {user_message}<br><span style='color:#1a73e8'><b>AI:</b> {ai_reply}</span><br><hr style='border-top:1px solid #ddd; margin:8px 0;'>"
         updated_logs = (sos_logs or "") + new_log
         
         cursor.execute("""
