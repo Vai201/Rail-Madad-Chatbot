@@ -16,6 +16,7 @@ from google.protobuf.json_format import MessageToDict
 from google.cloud import storage
 import datetime
 import uuid
+import requests
 
 # 2. LOAD ENV FIRST
 load_dotenv() 
@@ -1175,16 +1176,22 @@ def generate_upload_url():
         if not file_name or not content_type:
             return jsonify({"error": "Missing fileName or contentType"}), 400
 
+        # 1. Fetch the Service Account Email dynamically from Cloud Run's internal metadata
+        metadata_url = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/email"
+        sa_email = requests.get(metadata_url, headers={"Metadata-Flavor": "Google"}).text
+
         unique_filename = f"{uuid.uuid4().hex}_{file_name}"
         storage_client = storage.Client()
         bucket = storage_client.bucket(EVIDENCE_BUCKET_NAME)
         blob = bucket.blob(unique_filename)
 
+        # 2. Keyless Signing: We pass the service_account_email to force GCP to sign it remotely
         signed_url = blob.generate_signed_url(
             version="v4",
             expiration=datetime.timedelta(minutes=15),
             method="PUT",
-            content_type=content_type
+            content_type=content_type,
+            service_account_email=sa_email
         )
 
         public_url = f"https://storage.googleapis.com/{EVIDENCE_BUCKET_NAME}/{unique_filename}"
