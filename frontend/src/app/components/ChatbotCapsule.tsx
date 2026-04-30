@@ -18,7 +18,7 @@ const SUPPORTED_LANGUAGES = [
 ];
 
 export function ChatbotCapsule() {
-  // UI States
+  // UI States (Cleaned up duplicates)
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -74,9 +74,9 @@ export function ChatbotCapsule() {
     sessionIdRef.current = "session-" + Math.random().toString(36).substring(7);
   };
 
-  // Standard Dialogflow Chat Function
-  const sendMessageToApi = async (text: string, isHiddenInit = false, overrideLang?: string) => {
-    if (!text.trim()) return;
+  // Standard Dialogflow Chat Function (Updated with mediaUrl)
+  const sendMessageToApi = async (text: string, isHiddenInit = false, overrideLang?: string, mediaUrl?: string | null) => {
+    if (!text.trim() && !mediaUrl) return;
 
     if (!isHiddenInit) {
       setMessages(prev => [...prev, { id: Date.now().toString(), role: 'user', text }]);
@@ -91,7 +91,8 @@ export function ChatbotCapsule() {
         body: JSON.stringify({ 
             "message": text, 
             "language": overrideLang || language,
-            "session_id": sessionIdRef.current
+            "session_id": sessionIdRef.current,
+            "media_url": mediaUrl || null // Successfully passes the URL to Flask
         })
       });
 
@@ -239,7 +240,8 @@ export function ChatbotCapsule() {
         if (attachmentUrl) {
           finalMessageText += `\n[Evidence: ${attachmentUrl}]`;
         }
-        await sendMessageToApi(finalMessageText, true); 
+        // Properly pass the attachmentUrl to the API function
+        await sendMessageToApi(finalMessageText, true, undefined, attachmentUrl); 
       }
     } catch (err) {
       setMessages(prev => [...prev, { id: Date.now().toString(), role: 'bot', text: "Connection error. Please try again." }]);
@@ -500,10 +502,19 @@ export function ChatbotCapsule() {
                     </button>
                   )}
 
+                  {/* Restrict input dynamically */}
                   <input
-                    type="text"
+                    type={chatMode === 'tracking' ? "tel" : "text"}
                     value={message}
-                    onChange={(e) => setMessage(e.target.value)}
+                    onChange={(e) => {
+                      if (chatMode === 'tracking') {
+                        // Force only numbers and max 10 digits for tracking
+                        const onlyNums = e.target.value.replace(/\D/g, '');
+                        if (onlyNums.length <= 10) setMessage(onlyNums);
+                      } else {
+                        setMessage(e.target.value);
+                      }
+                    }}
                     placeholder={chatMode === 'sos_active' ? "Describe your emergency..." : chatMode === 'tracking' ? "Enter 10-digit number..." : allowMediaUpload ? "Describe issue & attach photo..." : "Type your message..."}
                     className={`flex-1 pl-4 pr-12 py-3 rounded-full border focus:outline-none focus:ring-2 text-sm transition-all shadow-inner ${
                       chatMode === 'sos_active' || chatMode === 'sos_auth' 

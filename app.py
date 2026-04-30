@@ -20,9 +20,6 @@ import uuid
 # 2. LOAD ENV FIRST
 load_dotenv() 
 
-# A temporary memory cache to smuggle URLs past Dialogflow!
-ghost_media_storage = {}
-
 # Define your bucket name
 EVIDENCE_BUCKET_NAME = "rail-madad-evidence-bucket"
 
@@ -568,18 +565,19 @@ def handle_complaint_logging(request_json):
     try:
         session_path = request_json.get('session', '')
         
-        media_url = None
-        for stored_session_id in list(ghost_media_storage.keys()):
-            if stored_session_id in session_path:
-                media_url = ghost_media_storage[stored_session_id]
-                del ghost_media_storage[stored_session_id]
-                break
-                
         parameters = request_json['queryResult'].get('parameters', {})
         complaint_text = parameters.get('complaint_text', '')
         
         if not complaint_text:
             complaint_text = request_json['queryResult'].get('queryText', '')
+
+        # --- NEW ROBUST URL EXTRACTION (Survives Gunicorn Workers!) ---
+        media_url = None
+        url_match = re.search(r'\[Evidence:\s*(https?://[^\s\]]+)\]', complaint_text)
+        if url_match:
+            media_url = url_match.group(1)
+            # Strip it from the text so it doesn't show up in the main complaint text field
+            complaint_text = re.sub(r'\n?\[Evidence:\s*https?://[^\]]+\]', '', complaint_text).strip()
 
         pnr = ""
         token = ""
@@ -757,12 +755,10 @@ def chat_proxy():
     session_id = data.get('session_id', 'default-session')
     
     try:
-        url_match = re.search(r'(https?://[^\s\]]+)', user_message)
-        if url_match:
-            ghost_media_storage[session_id] = url_match.group(1)
-            
-        user_message = re.sub(r'\n?\[Evidence:\s*https?://[^\]]+\]', '', user_message).strip()
-
+        # NOTE: We deleted the broken ghost_media_storage memory cache here.
+        # We are intentionally letting the [Evidence: https...] tag pass straight 
+        # into Dialogflow so that the handle_complaint_logging webhook can grab it.
+        
         english_input = process_translation(user_message, 'en')
         
         session_client = dialogflow.SessionsClient()
@@ -934,7 +930,9 @@ def get_db_as_html_table(query):
         release_db_connection(conn)
         if df.empty:
             return "<p>No records found in this database table.</p>"
-        return df.to_html(index=False, border=1, classes="table table-striped")
+            
+        # THE FIX FOR SOS LOGS: Added escape=False to stop Pandas from breaking HTML tags!
+        return df.to_html(index=False, border=1, classes="table table-striped", escape=False)
     except Exception as e:
         return f"<p>Error reading database: {e}. (The table may be empty.)</p>"
 

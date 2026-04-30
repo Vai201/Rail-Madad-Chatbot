@@ -19,7 +19,7 @@ const milestones = [
   {
     year: "1951",
     title: "Unification of the Grid",
-    description: "Following Independence, 42 fragmented and independent railway systems are officially nationalized and merged into a single, unified entity: Indian Railways.",
+    description: "Following Independence, 42 fragmented and independent railway systems are officially nationalized and merged into a 16 different Division which make unified entity: Indian Railways.",
     icon: "🇮🇳",
     imageUrl: "https://image.slidesharecdn.com/railwayzones-210708014356/75/Railway-zones-of-India-3-2048.jpg",
   },
@@ -130,8 +130,8 @@ export function Home() {
               className="text-5xl lg:text-7xl font-bold mb-6"
             >
               171 Years of{" "}
-              <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">
-                Excellence
+              <span className="bg-gradient-to-r from-orange-400 to-green-700 bg-clip-text text-transparent">
+                Moving India
               </span>
             </motion.h1>
             <motion.p
