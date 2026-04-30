@@ -37,7 +37,7 @@ def get_db_connection():
     )
 
 def release_db_connection(conn):
-    conn.close() # Cleanly cut the connection to save Cloud Run memory
+    conn.close()
 
 # Configure Gemini instantly
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -123,8 +123,6 @@ project_root = os.path.abspath(os.path.dirname(__file__))
 pnr_file_path = os.path.join(project_root, 'data', 'pnr_database.csv')
 stations_file_path = os.path.join(project_root, 'data', 'stations_original.csv')
 
-print(f"Connecting to Cloud SQL at: {DB_HOST}")
-
 # --- 2. RUN DATABASE SETUP ---
 def setup_database():
     try:
@@ -167,7 +165,7 @@ def setup_database():
         );
         ''')
         
-        # FIX: Added session_media table to securely hold the URL 
+        # --- NEW TABLE: Safely holds media URLs while Dialogflow processes the text ---
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS session_media (
             session_id TEXT PRIMARY KEY,
@@ -197,7 +195,6 @@ def cleanup_old_complaints():
         
         cursor.execute(cleanup_query)
         deleted_count = cursor.rowcount 
-        
         conn.commit()
         release_db_connection(conn)
         
@@ -208,19 +205,17 @@ def cleanup_old_complaints():
         print(f"❌ ERROR during automated database cleanup: {e}")
 
 # --- 3. Load Data at Startup ---
-pnr_data = None 
 station_data_raw = None
 station_data_processed = None
-print("✅ Skipping local CSV load - connected directly to Cloud SQL.")
+print("✅ Connected directly to Cloud SQL.")
 
 try:
     station_data_raw = pd.read_csv(stations_file_path, quotechar='"') 
     station_data_processed = station_data_raw.copy()
     station_data_processed['station'] = station_data_processed['station'].str.lower()
     station_data_processed['id_code'] = station_data_processed['id_code'].str.lower()
-    print("✅ Station dataset loaded successfully.")
 except Exception as e:
-    print(f"❌ ERROR loading Station data: {e}")
+    pass
 
 # --- 4. Helper Functions for Chatbot ---
 def handle_phone_number(request_json):
@@ -390,7 +385,6 @@ def handle_pnr_verification(request_json):
             train_no, travel_date = result
             
             pnr_list = list(pnr_digits)
-            import random
             random.shuffle(pnr_list)
             shuffled_pnr = "".join(pnr_list)
             token = f"TK-{shuffled_pnr[:6]}" 
@@ -419,9 +413,7 @@ def handle_pnr_verification(request_json):
         return {"fulfillmentText": "We are experiencing a database connection issue. Please type 'hi' to restart."}
 
 def syntax_router(text):
-    import re
     text = text.lower()
-    
     mapping = {
         "Sanitation & Cleaning": [r'\bdirty\b', r'\btoilet\b', r'\bwashroom\b', r'\bcleaning\b', r'\bfilthy\b', r'\bstink\b', r'\bgarbage\b'],
         "Catering & Food": [r'\bfood\b', r'\bpantry\b', r'\bovercharged\b', r'\bmeal\b', r'\bcatering\b', r'\bbad food\b', r'\bwater bottle\b'],
@@ -431,7 +423,6 @@ def syntax_router(text):
         "Staff Behavior": [r'\brude\b', r'\bstaff\b', r'\bunprofessional\b', r'\bbehavior\b', r'\bshouting\b'],
         "Water Supply": [r'\bno water\b', r'\btap\b', r'\bdry\b', r'\bwater supply\b']
     }
-    
     for dept, patterns in mapping.items():
         for pattern in patterns:
             if re.search(pattern, text):
@@ -457,9 +448,6 @@ def categorize_complaint(complaint_text):
     return "General", ""
 
 def neural_router(complaint_text):
-    import json
-    import re
-    
     valid_departments = [
         "Security", "Medical Assistance", "Sanitation & Cleaning", 
         "Maintenance & Electrical", "General" 
@@ -483,7 +471,6 @@ def neural_router(complaint_text):
     
     try:
         model = genai.GenerativeModel('models/gemma-3-27b-it')
-        
         safety_settings = [
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -501,8 +488,6 @@ def neural_router(complaint_text):
             return "General", ""
 
         raw_response = response.text.strip()
-        print(f"DEBUG GEMINI RAW: {raw_response}") 
-        
         match = re.search(r'\{.*\}', raw_response, re.DOTALL)
         
         if match:
@@ -516,23 +501,21 @@ def neural_router(complaint_text):
                 
             return dept, advice
         else:
-            print("CRITICAL: No JSON brackets found in Gemini response.")
             return "General", ""
             
     except Exception as e:
         print(f"CRITICAL GEMINI ERROR: {e}")
         return "General", ""
 
-# YOUR ORIGINAL FUNCTION KEPT INTACT!
 def get_agency_name(pnr_str):
     try:
         pnr_num = int(re.search(r'\d+', pnr_str).group())
-        if pnr_num <= 5000: agency = "M/s Ambuj Hotel Pvt. Ltd"
-        elif pnr_num <= 10000: agency = "M/s. R.K.Associates & Hoteliers Pvt.Ltd"
-        elif pnr_num <= 15000: agency = " M/s. Boon Catg. Co."
-        elif pnr_num <= 20000: agency = "M/s A.S Sales Corporation"
-        elif pnr_num <= 25000: agency = "M/s. Rathour Services"
-        else: agency = "M/s. A. A. Catg. Co"
+        if pnr_num <= 5000: return "M/s Ambuj Hotel Pvt. Ltd"
+        elif pnr_num <= 10000: return "M/s. R.K.Associates & Hoteliers Pvt.Ltd"
+        elif pnr_num <= 15000: return " M/s. Boon Catg. Co."
+        elif pnr_num <= 20000: return "M/s A.S Sales Corporation"
+        elif pnr_num <= 25000: return "M/s. Rathour Services"
+        else: return "M/s. A. A. Catg. Co"
     except:
         return "Internal Staff"
 
@@ -568,27 +551,31 @@ def get_random_closing_statement(dept):
     }
     if dept in ["Water Supply", "Maintenance & Electrical"]:
         return random.choice(statements["Sanitation & Cleaning"])
-    
     return random.choice(statements.get(dept, statements["Default"]))
 
 def handle_complaint_logging(request_json):
     try:
         session_path = request_json.get('session', '')
-        # Extract the pure Session ID to retrieve the URL safely
+        # Extract the pure Session ID
         session_id = session_path.split('/')[-1]
         
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        # --- FIX: GRAB THE URL FROM THE SECURE DB TABLE ---
         media_url = None
-        cursor.execute("SELECT media_url FROM session_media WHERE session_id = %s", (session_id,))
-        row = cursor.fetchone()
-        if row:
-            media_url = row[0]
-            # Clean up the memory table
-            cursor.execute("DELETE FROM session_media WHERE session_id = %s", (session_id,))
-        
+        try:
+            # GRAB THE URL FROM THE SECURE DB TABLE
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT media_url FROM session_media WHERE session_id = %s", (session_id,))
+            row = cursor.fetchone()
+            if row:
+                media_url = row[0]
+                # Clean up the memory table
+                cursor.execute("DELETE FROM session_media WHERE session_id = %s", (session_id,))
+            conn.commit()
+        except Exception as e:
+            print(f"Error fetching media URL from DB: {e}")
+            if conn:
+                conn.rollback()
+
         parameters = request_json['queryResult'].get('parameters', {})
         complaint_text = parameters.get('complaint_text', '')
         
@@ -622,26 +609,12 @@ def handle_complaint_logging(request_json):
         elif dept == "Security":
             agency = "The Railway Protection Force (RPF)"
         else:
-            agency = "Internal Staff"
-            if pnr:
-                try:
-                    pnr_match = re.search(r'\d{10}', pnr) 
-                    if pnr_match:
-                        pnr_num = int(pnr_match.group())
-                        if pnr_num <= 5000: agency = "M/s Ambuj Hotel Pvt. Ltd"
-                        elif pnr_num <= 10000: agency = "M/s. R.K.Associates & Hoteliers Pvt.Ltd"
-                        elif pnr_num <= 15000: agency = " M/s. Boon Catg. Co."
-                        elif pnr_num <= 20000: agency = "M/s A.S Sales Corporation"
-                        elif pnr_num <= 25000: agency = "M/s. Rathour Services"
-                        else: agency = "M/s. A. A. Catg. Co"
-                except Exception as e:
-                    print(f"Agency assignment error: {e}")
+            agency = get_agency_name(pnr)
 
         pnr_to_store = pnr if pnr else "UNRESERVED"
         status = "Open"
         closing_msg = "" 
 
-        # Insert everything securely into the master log
         cursor.execute(
             """INSERT INTO bot_complaints 
                (phone_number, pnr, token, station, travel_date, complaint_text, department, agency, status, closing_statement, media_url) 
@@ -655,29 +628,17 @@ def handle_complaint_logging(request_json):
         base_msg = f"Complaint registered (ID: C-{new_id}) routed to {dept} ({agency})."
         
         reply_payload = {
-            "fulfillmentMessages": [
-                {
-                    "text": {
-                        "text": [base_msg]
-                    }
-                }
-            ]
+            "fulfillmentMessages": [{"text": {"text": [base_msg]}}]
         }
         
         if dept in ["Security", "Medical Assistance"]:
             emergency_alert = f"🚨 EMERGENCY ACTION: On-duty {dept} personnel have been alerted and are being dispatched to your location instantly."
-            reply_payload["fulfillmentMessages"].append({
-                "text": {
-                    "text": [emergency_alert]
-                }
-            })
+            reply_payload["fulfillmentMessages"].append({"text": {"text": [emergency_alert]}})
+            
         if advice_tip:
             emergency_alert = f"🚨 IMMEDIATE ADVICE: {advice_tip} Help is on the way."
-            reply_payload["fulfillmentMessages"].append({
-                "text": {"text": [emergency_alert]}
-            })
+            reply_payload["fulfillmentMessages"].append({"text": {"text": [emergency_alert]}})
             
-        session_path = request_json.get('session')
         reply_payload["outputContexts"] = [
             {"name": f"{session_path}/contexts/awaiting-location", "lifespanCount": 0},
             {"name": f"{session_path}/contexts/awaiting-station-confirmation", "lifespanCount": 0},
@@ -710,25 +671,12 @@ def webhook():
         parameters = req.get('queryResult', {}).get('parameters', {})
         phone = parameters.get('phone_number')
         query_text = parameters.get('user_query')
-        
         final_response = process_passenger_query(phone, query_text)
         
         return jsonify({
             "fulfillmentMessages": [
                 {"text": {"text": [final_response]}},
-                {
-                    "payload": {
-                        "richContent": [[
-                            {
-                                "type": "chips",
-                                "options": [
-                                    {"text": "Ask Another Query"},
-                                    {"text": "Register a Complaint"}
-                                ]
-                            }
-                        ]]
-                    }
-                }
+                {"payload": {"richContent": [[{"type": "chips","options": [{"text": "Ask Another Query"},{"text": "Register a Complaint"}]}]]}}
             ]
         })
 
@@ -738,19 +686,7 @@ def webhook():
             "fulfillmentMessages": [
                 {"text": {"text": ["You are very welcome! Have a safe journey."]}},
                 {"text": {"text": ["Welcome to Rail Madad, please select any one:"]}},
-                {
-                    "payload": {
-                        "richContent": [[
-                            {
-                                "type": "chips",
-                                "options": [
-                                    {"text": "Register a Complaint"},
-                                    {"text": "Query"}
-                                ]
-                            }
-                        ]]
-                    }
-                }
+                {"payload": {"richContent": [[{"type": "chips","options": [{"text": "Register a Complaint"},{"text": "Query"}]}]]}}
             ],
             "outputContexts": [
                 {"name": f"{session_id}/contexts/awaiting-location", "lifespanCount": 0},
@@ -768,28 +704,32 @@ def chat_proxy():
     user_message = data.get('message', '')
     selected_language = data.get('language', 'en')
     session_id = data.get('session_id', 'default-session')
-    media_url = data.get('media_url')
     
     try:
-        # --- FIX: STORE URL IN DB IMMEDIATELY ---
-        if media_url:
+        # THE URL SMUGGLING FIX
+        extracted_url = None
+        url_match = re.search(r'\[Evidence:\s*(https?://[^\s\]]+)\]', user_message)
+        if url_match:
+            extracted_url = url_match.group(1)
+            user_message = user_message.replace(url_match.group(0), '').strip()
+
+        # If user just uploaded a photo and sent no text, give Dialogflow dummy text
+        if not user_message and extracted_url:
+            user_message = "I have attached a photo as evidence for my complaint."
+
+        # Store URL in DB immediately
+        if extracted_url:
             conn = get_db_connection()
             cursor = conn.cursor()
             cursor.execute("""
                 INSERT INTO session_media (session_id, media_url)
                 VALUES (%s, %s)
                 ON CONFLICT (session_id) DO UPDATE SET media_url = EXCLUDED.media_url;
-            """, (session_id, media_url))
+            """, (session_id, extracted_url))
             conn.commit()
             release_db_connection(conn)
 
-        # Strip URL tag out so Google Translate and Dialogflow NLP don't crash
-        user_message = re.sub(r'\n?\[Evidence:\s*https?://[^\]]+\]', '', user_message).strip()
-        
-        # CRITICAL: If user just uploaded a photo and sent no text, give Dialogflow something to read!
-        if not user_message and media_url:
-            user_message = "I have attached a photo as evidence for my complaint."
-
+        # Safely translate the pure text
         english_input = process_translation(user_message, 'en')
         
         session_client = dialogflow.SessionsClient()
@@ -797,9 +737,7 @@ def chat_proxy():
         text_input = dialogflow.TextInput(text=english_input, language_code="en")
         query_input = dialogflow.QueryInput(text=text_input)
         
-        response = session_client.detect_intent(
-            request={"session": session, "query_input": query_input}
-        )
+        response = session_client.detect_intent(request={"session": session, "query_input": query_input})
         
         bot_responses = []
         for msg in response.query_result.fulfillment_messages:
@@ -818,7 +756,6 @@ def chat_proxy():
         for msg in response.query_result.fulfillment_messages:
             try:
                 raw_proto = msg._pb if hasattr(msg, '_pb') else msg
-                from google.protobuf.json_format import MessageToDict
                 msg_dict = MessageToDict(raw_proto)
                 if 'payload' in msg_dict and 'richContent' in msg_dict['payload']:
                     buttons = msg_dict['payload']['richContent'][0][0].get('options', [])
@@ -873,7 +810,6 @@ def track_by_phone():
             comp_id = row[0]
             dept = row[1]
             closing_statement = get_random_closing_statement(dept)
-            
             cursor.execute("""
                 UPDATE bot_complaints 
                 SET status = 'Closed', closing_statement = %s 
@@ -942,7 +878,6 @@ def cron_auto_close():
             print(f"CRON: Automatically closed {closed_count} complaints.")
             
         release_db_connection(conn)
-        
         return jsonify({"status": "success", "closed_complaints": closed_count})
 
     except Exception as e:
@@ -959,16 +894,25 @@ def get_db_as_html_table(query):
             warnings.simplefilter('ignore', UserWarning)
             df = pd.read_sql_query(query, conn)
         release_db_connection(conn)
+        
         if df.empty:
             return "<p>No records found in this database table.</p>"
             
-        # FIX: Escape=False stops pandas from converting HTML tags to raw text
+        def make_clickable(val):
+            if pd.isna(val) or not val: return ""
+            if isinstance(val, str) and val.startswith("http"):
+                return f'<a href="{val}" target="_blank" style="background:#f8f9fa; border:1px solid #dadce0; padding:4px 8px; border-radius:4px; color:#1a73e8; text-decoration:none; font-weight:bold;">📎 View Evidence</a>'
+            return val
+            
+        if 'media_url' in df.columns:
+            df['media_url'] = df['media_url'].apply(make_clickable)
+
+        # Escape=False stops pandas from converting HTML tags to raw text
         return df.to_html(index=False, border=0, classes="table", escape=False)
     except Exception as e:
         return f"<p>Error reading database: {e}</p>"
 
 def get_page_template(title, table_html):
-    # CSS Upgraded to match the modern RBAC portal style!
     return f"""
     <html>
         <head>
@@ -1026,7 +970,7 @@ def admin_dashboard():
 
 @app.route('/view-complaints')
 def view_complaints():
-    query = "SELECT * FROM bot_complaints ORDER BY timestamp DESC"
+    query = "SELECT complaint_id, timestamp, phone_number, pnr, token, station, travel_date, complaint_text, department, agency, status, closing_statement, media_url, sos_logs FROM bot_complaints ORDER BY timestamp DESC"
     return get_page_template("Master Complaints Log", get_db_as_html_table(query))
 
 @app.route('/view-pnrs')
@@ -1195,10 +1139,7 @@ def generate_upload_url():
 
         public_url = f"https://storage.googleapis.com/{EVIDENCE_BUCKET_NAME}/{unique_filename}"
 
-        return jsonify({
-            "signedUrl": signed_url,
-            "publicUrl": public_url
-        })
+        return jsonify({"signedUrl": signed_url, "publicUrl": public_url})
 
     except Exception as e:
         print(f"Error generating signed URL: {e}")
@@ -1206,12 +1147,10 @@ def generate_upload_url():
 
 @app.route('/api/sos', methods=['POST'])
 def handle_sos():
-    """Handles the 48-Hour Emergency SOS Mode"""
     data = request.get_json()
     comp_id_raw = data.get('complaint_id', '')
     user_message = data.get('message', '')
 
-    # Clean the ID (handles "C-45", "c-45", or just "45")
     comp_id_str = str(comp_id_raw).replace('C-', '').replace('c-', '').strip()
     if not comp_id_str.isdigit():
         return jsonify({"reply": "Invalid Complaint ID format. Please use numbers only or 'C-XX'."})
@@ -1222,12 +1161,7 @@ def handle_sos():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # 1. Fetch the complaint
-        cursor.execute("""
-            SELECT department, timestamp, sos_logs FROM bot_complaints 
-            WHERE complaint_id = %s
-        """, (comp_id,))
-        
+        cursor.execute("SELECT department, timestamp, sos_logs FROM bot_complaints WHERE complaint_id = %s", (comp_id,))
         record = cursor.fetchone()
         if not record:
             release_db_connection(conn)
@@ -1235,18 +1169,15 @@ def handle_sos():
             
         dept, ts, sos_logs = record
         
-        # 2. STRICT 48-HOUR CHECK
         from datetime import datetime, timedelta
         if datetime.now() - ts > timedelta(hours=48):
             release_db_connection(conn)
             return jsonify({"reply": "SOS Assistance has expired (only available for 48 hours post-complaint)."})
             
-        # 3. STRICT DEPARTMENT CHECK
         if dept not in ["Security", "Medical Assistance"]:
             release_db_connection(conn)
             return jsonify({"reply": f"SOS mode is strictly for Security and Medical emergencies. Your original complaint is registered under {dept}."})
 
-        # 4. LLM ABUSE GUARDRAILS
         prompt = f"""
         You are the RailMadad SOS Emergency Responder. 
         The passenger is referencing a recent {dept} emergency.
@@ -1264,14 +1195,10 @@ def handle_sos():
         response = model.generate_content(prompt)
         ai_reply = response.text
         
-        # 5. LOG THE INTERACTION FOR THE ADMINS
         new_log = f"<b>User:</b> {user_message}<br><span style='color:#1a73e8'><b>AI:</b> {ai_reply}</span><br><hr style='border-top:1px solid #ddd; margin:8px 0;'>"
         updated_logs = (sos_logs or "") + new_log
         
-        cursor.execute("""
-            UPDATE bot_complaints SET sos_logs = %s WHERE complaint_id = %s
-        """, (updated_logs, comp_id))
-        
+        cursor.execute("UPDATE bot_complaints SET sos_logs = %s WHERE complaint_id = %s", (updated_logs, comp_id))
         conn.commit()
         release_db_connection(conn)
         
@@ -1281,7 +1208,6 @@ def handle_sos():
         print(f"SOS Error: {e}")
         return jsonify({"reply": "SOS System Error. Please contact railway staff immediately."})
 
-# --- 7. Run the Server ---
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
