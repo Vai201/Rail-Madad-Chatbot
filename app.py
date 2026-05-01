@@ -1042,9 +1042,11 @@ def department_dashboard():
         "Ticketing & Refunds", "Luggage & Parcels", "Staff Behavior", 
         "Water Supply", "Security", "Medical Assistance", "General"
     ]
+    
+    # 1. Added c.sos_logs to the SQL Query
     query = """
         SELECT c.complaint_id, c.timestamp, c.phone_number, c.pnr, c.token, 
-               c.complaint_text, c.status, p.train_no, c.travel_date, c.closing_statement, c.station, c.media_url
+               c.complaint_text, c.status, p.train_no, c.travel_date, c.closing_statement, c.station, c.media_url, c.sos_logs
         FROM bot_complaints c
         LEFT JOIN pnr_records p ON c.pnr = p.pnr_number
         WHERE c.department = %s
@@ -1052,6 +1054,10 @@ def department_dashboard():
     """
     table_rows = ""
     conn = None
+    
+    # Determine if we should show the SOS column
+    show_sos_column = selected_dept in ["Security", "Medical Assistance"]
+    
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -1059,20 +1065,24 @@ def department_dashboard():
         records = cursor.fetchall()
         
         for row in records:
-            comp_id, ts, phone, pnr, token, text, status, train_no, travel_date, closing_statement, station, media_url = row
+            comp_id, ts, phone, pnr, token, text, status, train_no, travel_date, closing_statement, station, media_url, sos_logs = row
             
-            # Logic for Masking and Mock Data
             mock_coach = f"{random.choice(['B','A','S'])}{hash(pnr) % 9 + 1}" if pnr and pnr != "UNRESERVED" and not str(pnr).startswith("REDACTED") else "N/A"
             mock_seat = str(hash(pnr) % 72 + 1) if pnr and pnr != "UNRESERVED" and not str(pnr).startswith("REDACTED") else "N/A"
             
+            # Keep Phone & PNR Masked for standard departments
             if selected_dept in ["Security", "Medical Assistance"]:
                 display_phone = phone
                 display_pnr = pnr
-                display_coach = mock_coach
-                display_seat = mock_seat
             else:
                 display_phone = f"******{phone[-4:]}" if phone and len(phone) >= 4 else "REDACTED"
                 display_pnr = f"REDACTED (TK-{token[-4:]})" if token else "REDACTED"
+                
+            # 2. UPDATED LOGIC: Only Catering & Food masks the Coach and Seat!
+            if selected_dept != "Catering & Food":
+                display_coach = mock_coach
+                display_seat = mock_seat
+            else:
                 display_coach = "🔒 MASKED"
                 display_seat = "🔒 MASKED"
             
@@ -1080,7 +1090,6 @@ def department_dashboard():
             date_display = travel_date if travel_date else "N/A"
             station_display = station if station else "Not Provided"
             
-            # 🚨 FIX: Display Complaint ID as clickable link! 🚨
             media_html = "None"
             if media_url and str(media_url).strip().lower() != 'none':
                 media_html = f'<a href="{media_url}" target="_blank" style="color:#1a73e8; font-weight:bold; text-decoration:underline;">C-{comp_id}</a>'
@@ -1089,6 +1098,15 @@ def department_dashboard():
             status_html = f'<b style="color:{status_color};">{status}</b>'
             if status == "Closed" and closing_statement:
                 status_html += f'<br><span style="font-size: 0.85em; color: #555; display:block; margin-top:4px;">{closing_statement}</span>'
+            
+            # 3. Format the SOS Logs for the new column
+            sos_td = ""
+            if show_sos_column:
+                if sos_logs:
+                    sos_content = f"<div style='max-height: 120px; overflow-y: auto; font-size: 0.85em; background: #fff5f5; padding: 6px; border: 1px solid #ffe3e3; border-radius: 4px;'>{sos_logs}</div>"
+                else:
+                    sos_content = "<span style='color:#aaa; font-style:italic;'>No SOS active</span>"
+                sos_td = f"<td style='min-width: 250px;'>{sos_content}</td>"
             
             table_rows += f"""
             <tr>
@@ -1103,11 +1121,13 @@ def department_dashboard():
                 <td style="color: #1a73e8; font-weight: bold;">{display_seat}</td>
                 <td>{text}</td>
                 <td>{media_html}</td>
+                {sos_td}
                 <td>{status_html}</td>
             </tr>
             """
     except Exception as e:
-        table_rows = f"<tr><td colspan='12'>Database Error: {e}</td></tr>"
+        colspan = 13 if show_sos_column else 12
+        table_rows = f"<tr><td colspan='{colspan}'>Database Error: {e}</td></tr>"
     finally:
         if conn: release_db_connection(conn)
 
@@ -1115,6 +1135,9 @@ def department_dashboard():
     for d in departments:
         selected_attr = "selected" if str(d) == str(selected_dept) else ""
         dropdown_options += f'<option value="{d}" {selected_attr}>{d} Portal</option>'
+
+    # Add the SOS Header dynamically
+    sos_th = "<th>SOS Live Logs</th>" if show_sos_column else ""
 
     return f"""
     <html>
@@ -1159,6 +1182,7 @@ def department_dashboard():
                         <th>Seat</th>
                         <th style="width: 20%;">Complaint Details</th>
                         <th>Evidence</th>
+                        {sos_th}
                         <th>Status & Resolution</th>
                     </tr>
                     {table_rows}
