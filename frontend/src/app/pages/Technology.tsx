@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { Code, Cpu, Database, Cloud, Sparkles, Zap } from "lucide-react";
+import { Code, Cpu, Database, Cloud, Sparkles } from "lucide-react";
 import { useState, useEffect } from "react";
 
 interface TechLogo {
@@ -105,13 +105,18 @@ export function Technology() {
   const [hoveredTech, setHoveredTech] = useState<string | null>(null);
   const [pinnedTech, setPinnedTech] = useState<string | null>(null);
   const [radius, setRadius] = useState(280);
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Handle responsive radius for the orbit
+  // Handle responsive radius and mobile check
   useEffect(() => {
     const handleResize = () => {
-      if (window.innerWidth < 640) setRadius(120); // Mobile
-      else if (window.innerWidth < 1024) setRadius(200); // Tablet
-      else setRadius(280); // Desktop
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      
+      // INCREASED RADIUS SIZES HERE
+      if (window.innerWidth < 640) setRadius(140); // Was 120 -> Now 140 (Mobile)
+      else if (window.innerWidth < 1024) setRadius(220); // Was 200 -> Now 220 (Tablet)
+      else setRadius(300); // Was 280 -> Now 300 (Desktop)
     };
     
     handleResize(); // Initial check
@@ -122,7 +127,7 @@ export function Technology() {
   // Global click listener to close pinned tooltip when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement).closest('.tech-node')) {
+      if (!(e.target as HTMLElement).closest('.tech-node') && !(e.target as HTMLElement).closest('.mobile-tooltip')) {
         setPinnedTech(null);
       }
     };
@@ -135,10 +140,48 @@ export function Technology() {
     setPinnedTech(pinnedTech === techName ? null : techName);
   };
 
+  // Find the currently active technology to display in the mobile popup
+  const activeTechObj = techStack.find(t => t.name === (pinnedTech || hoveredTech));
+
   return (
-    <div className="pt-16 min-h-screen">
+    // FIX: w-full max-w-full overflow-x-hidden applied to the outermost div to kill horizontal scroll
+    <div className="pt-16 min-h-screen w-full max-w-full overflow-x-hidden relative">
+      
+      {/* Mobile Tooltip - Moved OUTSIDE the transformed orbital map to prevent clipping! */}
+      <AnimatePresence>
+        {isMobile && activeTechObj && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="mobile-tooltip fixed bottom-6 left-4 right-4 bg-slate-900/95 backdrop-blur-xl border border-white/20 p-5 rounded-2xl shadow-2xl z-[100]"
+          >
+            <div className="flex items-start gap-4">
+              <div className="size-12 bg-white rounded-xl flex items-center justify-center flex-shrink-0 p-2.5 border border-slate-700">
+                <img src={activeTechObj.imageUrl} alt={activeTechObj.name} className="w-full h-full object-contain" />
+              </div>
+              <div className="flex-1 text-left min-w-0">
+                <h3 className="text-lg font-bold text-white mb-0.5 truncate">{activeTechObj.name}</h3>
+                <p className="text-indigo-400 text-[11px] font-bold mb-2 uppercase tracking-widest truncate">{activeTechObj.role}</p>
+                <p className="text-slate-300 text-sm leading-relaxed break-words">{activeTechObj.description}</p>
+              </div>
+            </div>
+            {pinnedTech && (
+              <div className="mt-4 pt-3 border-t border-white/10 flex justify-end">
+                <button 
+                  onClick={() => setPinnedTech(null)}
+                  className="text-xs font-semibold text-slate-400 hover:text-white transition-colors bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-lg"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Hero Section */}
-      <section className="relative bg-gradient-to-br from-slate-900 via-indigo-900 to-purple-900 text-white py-20">
+      <section className="relative bg-gradient-to-br from-slate-900 via-indigo-900 to-purple-900 text-white py-20 w-full">
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjEiIHN0cm9rZS13aWR0aD0iMSIvPjwvcGF0dGVybj48L2RlZnM+PHJlY3Qgd2lkdGg9IjEwMCUiIGhlaWdodD0iMTAwJSIgZmlsbD0idXJsKCNncmlkKSIvPjwvc3ZnPg==')] opacity-20" />
         </div>
@@ -167,7 +210,7 @@ export function Technology() {
       </section>
 
       {/* Orbiting Logos Section */}
-      <section className="py-20 bg-gradient-to-b from-slate-900 to-slate-800 relative overflow-hidden">
+      <section className="py-20 bg-gradient-to-b from-slate-900 to-slate-800 relative overflow-hidden w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -177,7 +220,7 @@ export function Technology() {
           >
             <h2 className="text-4xl font-bold text-white mb-4">Our Technology Stack</h2>
             <p className="text-slate-300 max-w-2xl mx-auto">
-              Hover over or tap each technology to explore its role in our ecosystem
+              {isMobile ? "Tap" : "Hover over or tap"} each technology to explore its role in our ecosystem
             </p>
           </motion.div>
 
@@ -219,7 +262,7 @@ export function Technology() {
               const x = Math.cos(angleInRadians) * radius;
               const y = Math.sin(angleInRadians) * radius;
               
-              const isHovered = hoveredTech === tech.name;
+              const isHovered = !isMobile && hoveredTech === tech.name;
               const isPinned = pinnedTech === tech.name;
               const isActive = isHovered || isPinned;
 
@@ -227,16 +270,9 @@ export function Technology() {
                 <motion.div
                   key={tech.name}
                   className={`absolute tech-node ${isActive ? 'z-50' : 'z-10'}`}
-                  style={{
-                    left: "50%",
-                    top: "50%",
-                  }}
+                  style={{ left: "50%", top: "50%" }}
                   initial={{ x: 0, y: 0, opacity: 0 }}
-                  animate={{
-                    x: x,
-                    y: y,
-                    opacity: 1,
-                  }}
+                  animate={{ x: x, y: y, opacity: 1 }}
                   transition={{
                     x: { delay: index * 0.1, duration: 0.8 },
                     y: { delay: index * 0.1, duration: 0.8 },
@@ -244,9 +280,9 @@ export function Technology() {
                   }}
                 >
                   <motion.div
-                    whileHover={{ scale: 1.15 }}
-                    onHoverStart={() => setHoveredTech(tech.name)}
-                    onHoverEnd={() => setHoveredTech(null)}
+                    whileHover={{ scale: isMobile ? 1 : 1.15 }}
+                    onHoverStart={() => !isMobile && setHoveredTech(tech.name)}
+                    onHoverEnd={() => !isMobile && setHoveredTech(null)}
                     onClick={(e) => handleNodeClick(tech.name, e)}
                     className="relative group cursor-pointer -translate-x-1/2 -translate-y-1/2"
                   >
@@ -260,7 +296,7 @@ export function Technology() {
 
                     {/* Connection line to center */}
                     <motion.div
-                      className="absolute top-1/2 left-1/2 origin-left -z-20"
+                      className="absolute top-1/2 left-1/2 origin-left -z-20 hidden sm:block"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: isActive ? 0.4 : 0 }}
                       style={{
@@ -271,34 +307,32 @@ export function Technology() {
                       }}
                     />
 
-                    {/* Tooltip Information Box */}
+                    {/* DESKTOP Tooltip Information Box (Mobile handled globally above) */}
                     <AnimatePresence>
-                      {isActive && (
+                      {!isMobile && isActive && (
                         <motion.div
                           initial={{ opacity: 0, scale: 0.9, y: 10 }}
                           animate={{ opacity: 1, scale: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.9, y: 10 }}
                           transition={{ type: "spring", stiffness: 400, damping: 25 }}
                           className={`
-                            fixed bottom-6 left-4 right-4 
-                            md:absolute md:top-1/2 md:-translate-y-1/2 md:bottom-auto md:left-auto md:right-auto md:w-72 
+                            absolute top-1/2 -translate-y-1/2 w-72 
                             bg-slate-900/95 backdrop-blur-xl border border-white/20 p-5 rounded-2xl shadow-2xl z-[100]
-                            ${x > 0 ? 'md:right-full md:mr-6' : 'md:left-full md:ml-6'}
+                            ${x > 0 ? 'right-full mr-6' : 'left-full ml-6'}
                           `}
-                          onClick={(e) => e.stopPropagation()} // Prevent clicks inside tooltip from closing it
+                          onClick={(e) => e.stopPropagation()}
                         >
                           <div className="flex items-start gap-4">
                             <div className="size-12 bg-white rounded-xl flex items-center justify-center flex-shrink-0 p-2.5 border border-slate-700">
                               <img src={tech.imageUrl} alt={tech.name} className="w-full h-full object-contain" />
                             </div>
-                            <div className="flex-1 text-left">
-                              <h3 className="text-lg font-bold text-white mb-0.5">{tech.name}</h3>
-                              <p className="text-indigo-400 text-[11px] font-bold mb-2 uppercase tracking-widest">{tech.role}</p>
-                              <p className="text-slate-300 text-sm leading-relaxed">{tech.description}</p>
+                            <div className="flex-1 text-left min-w-0">
+                              <h3 className="text-lg font-bold text-white mb-0.5 truncate">{tech.name}</h3>
+                              <p className="text-indigo-400 text-[11px] font-bold mb-2 uppercase tracking-widest truncate">{tech.role}</p>
+                              <p className="text-slate-300 text-sm leading-relaxed break-words">{tech.description}</p>
                             </div>
                           </div>
                           
-                          {/* Close button shown only when pinned (especially useful for mobile) */}
                           {isPinned && (
                             <div className="mt-4 pt-3 border-t border-white/10 flex justify-end">
                               <button 
@@ -334,7 +368,7 @@ export function Technology() {
       </section>
 
       {/* Features Grid */}
-      <section className="py-20 bg-gradient-to-b from-slate-800 to-slate-900">
+      <section className="py-20 bg-gradient-to-b from-slate-800 to-slate-900 w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -370,7 +404,7 @@ export function Technology() {
       </section>
 
       {/* Open Source CTA */}
-      <section className="py-16 bg-gradient-to-r from-indigo-600 to-blue-600">
+      <section className="py-16 bg-gradient-to-r from-indigo-600 to-blue-600 w-full">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-white">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
