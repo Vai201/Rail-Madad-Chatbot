@@ -7,14 +7,14 @@ const milestones = [
     title: "The Genesis of a Network",
     description: "The inaugural 34-kilometer passenger run from Bori Bunder to Thane. Operating entirely on steam and manual ledgers, this single route laid the foundation for what would become the world's most complex transit network.",
     icon: "🚂",
-    imageUrl: "https://irfca.org/gallery/main.php?g2_view=core.DownloadItem&g2_itemId=20236&g2_serialNumber=3",
+    imageUrl: "https://storage.googleapis.com/rail-madad-assets-yourname/gipr_ghat_Y43_SS_class_4_6_0ST_1863.jpg",
   },
   {
     year: "1925",
     title: "The Electric Transition",
     description: "India's first electric train operates between Bombay VT and Poona (Today's Pune). This historic shift away from pure steam propulsion paved the way for the massive electrified network of modern India.",
     icon: "⚡",
-    imageUrl: "https://irfca.org/gallery/main.php?g2_view=core.DownloadItem&g2_itemId=130340&g2_serialNumber=10",
+    imageUrl: "https://storage.googleapis.com/rail-madad-assets-yourname/Deccan%20Queen%20Month%20after%20inaugration.jpg",
   },
   {
     year: "1951",
@@ -28,7 +28,7 @@ const milestones = [
     title: "Silicon & Speed",
     description: "The Centre for Railway Information Systems (CRIS) introduces computerized passenger reservation, shifting ticketing from paper queues to a digital database. Two years later, the Shatabdi Express is launched.",
     icon: "💻",
-    imageUrl: "https://irfca.org/gallery/main.php?g2_view=core.DownloadItem&g2_itemId=30263&g2_serialNumber=2",
+    imageUrl: "https://storage.googleapis.com/rail-madad-assets-yourname/shtbdi_carige.jpg",
   },
   {
     year: "2016",
