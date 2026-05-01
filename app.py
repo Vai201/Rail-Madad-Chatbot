@@ -1011,28 +1011,52 @@ def get_db_as_html_table(query):
     except Exception as e:
         return f"<p>Error reading database: {e}</p>"
 
-def get_page_template(title, table_html):
+def get_page_template(title, subtitle, table_html):
+    # This automatically strips out the ugly default borders pandas tries to add
+    clean_table_html = table_html.replace('border="1"', 'border="0"')
+    
     return f"""
     <html>
         <head>
             <title>{title}</title>
             <style>
-                body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f9; padding: 20px; }}
-                h1 {{ color: #1a2035; margin-bottom: 5px; }}
-                .table-container {{ background: white; padding: 20px; border-radius: 8px; margin-top: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); overflow-x: auto; }}
-                table {{ width: 100%; border-collapse: collapse; text-align: left; min-width: 1000px; }}
-                th, td {{ padding: 12px; border-bottom: 1px solid #ddd; vertical-align: top; font-size: 14px; }}
-                th {{ background: #f8f9fa; color: #333; position: sticky; top: 0; font-weight: 600; }}
-                tr:hover {{ background-color: #f1f1f1; }}
-                a.btn {{ font-size: 14px; color: #1a73e8; text-decoration: none; font-weight: bold; display: inline-block; margin-bottom: 15px; background: white; padding: 8px 16px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e0e0e0; }}
-                a.btn:hover {{ background: #f8f9fa; }}
+                body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f9; padding: 30px; margin: 0; }}
+                
+                /* Sleek Dark Header matching RBAC Portal */
+                .header {{ background: #1a2035; color: white; padding: 25px 30px; border-radius: 12px; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); margin-bottom: 25px; position: relative; overflow: hidden; }}
+                .header h1 {{ margin: 0; font-size: 28px; font-weight: 700; letter-spacing: 0.5px; z-index: 10; }}
+                .header p {{ margin: 8px 0 0 0; color: #94a3b8; font-size: 15px; font-weight: 500; z-index: 10; }}
+                
+                /* Decorative background glow in header */
+                .header::after {{ content: ''; position: absolute; right: -50px; top: -50px; width: 200px; height: 200px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); filter: blur(50px); opacity: 0.2; border-radius: 50%; z-index: 1; }}
+
+                /* Modernized Table Container */
+                .table-container {{ background: white; padding: 0; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03); overflow-x: auto; overflow-y: hidden; border: 1px solid #e2e8f0; }}
+                table {{ width: 100%; border-collapse: collapse; text-align: left; min-width: 1200px; font-size: 14px; }}
+                th, td {{ padding: 16px 20px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }}
+                
+                /* Sticky Modern Headers */
+                th {{ background: #f8fafc; color: #475569; position: sticky; top: 0; font-weight: 700; text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px; border-bottom: 2px solid #e2e8f0; }}
+                tr:last-child td {{ border-bottom: none; }}
+                tr:hover {{ background-color: #f8fafc; transition: background-color 0.15s ease; }}
+                
+                /* Stylish Back Button */
+                a.btn {{ font-size: 14px; color: #475569; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; margin-bottom: 20px; background: white; padding: 10px 20px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; transition: all 0.2s ease; }}
+                a.btn:hover {{ background: #f1f5f9; color: #0f172a; transform: translateY(-1px); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }}
+                
+                /* Pandas cleanup */
+                .dataframe {{ border: none !important; }}
+                .dataframe thead th {{ text-align: left; }}
             </style>
         </head>
         <body>
-            <h1>{title}</h1>
-            <a href="/admin" class="btn">⬅ Back to Admin Dashboard</a>
+            <a href="/admin" class="btn">⬅ Back to Master Admin</a>
+            <div class="header">
+                <h1>{title}</h1>
+                <p>{subtitle}</p>
+            </div>
             <div class="table-container">
-                {table_html}
+                {clean_table_html}
             </div>
         </body>
     </html>
@@ -1040,6 +1064,7 @@ def get_page_template(title, table_html):
 
 @app.route('/admin')
 def admin_dashboard():
+    # ... (Keep your existing admin_dashboard function exactly the same!) ...
     return """
     <html>
         <head>
@@ -1069,21 +1094,33 @@ def admin_dashboard():
 
 @app.route('/view-complaints')
 def view_complaints():
-    query = "SELECT complaint_id, timestamp, phone_number, pnr, token, station, travel_date, complaint_text, department, agency, media_url, status, closing_statement, sos_logs FROM bot_complaints ORDER BY timestamp DESC"
-    return get_page_template("Master Complaints Log", get_db_as_html_table(query))
+    query = "SELECT complaint_id, timestamp, phone_number, pnr, token, station, travel_date, complaint_text, department, agency, status, closing_statement, media_url, sos_logs FROM bot_complaints ORDER BY timestamp DESC"
+    return get_page_template(
+        "📝 Master Complaints Log", 
+        "Complete historical record of all passenger queries, evidence links, and resolution statuses.", 
+        get_db_as_html_table(query)
+    )
 
 @app.route('/view-pnrs')
 def view_pnrs():
     query = "SELECT * FROM pnr_records LIMIT 100"
     table_html = get_db_as_html_table(query)
     if "No records found" in table_html or "Error" in table_html:
-        table_html = "<p>No PNR records found. Please import your CSV into Cloud SQL.</p>"
-    return get_page_template("PNR Database Ledger", table_html)
+        table_html = "<p style='padding: 20px; color: #64748b; font-weight: 500;'>No PNR records found. Please import your CSV into Cloud SQL.</p>"
+    return get_page_template(
+        "🎫 PNR Database Ledger", 
+        "Centralized passenger name record validation and train assignment data.", 
+        table_html
+    )
 
 @app.route('/view-stations')
 def view_stations():
     query = "SELECT * FROM stations LIMIT 100" 
-    return get_page_template("Station Database Registry", get_db_as_html_table(query))
+    return get_page_template(
+        "🚉 Station Database Registry", 
+        "Official directory of all supported railway stations and regional identification codes.", 
+        get_db_as_html_table(query)
+    )
 
 @app.route('/department-dashboard')
 def department_dashboard():
