@@ -1233,7 +1233,7 @@ def department_dashboard():
         selected_attr = "selected" if str(d) == str(selected_dept) else ""
         dropdown_options += f'<option value="{d}" {selected_attr}>{d} Portal</option>'
 
-    # Add the SOS Header dynamically
+    # Add the SOS Header dynamically (Keep this from your existing code)
     sos_th = "<th>SOS Live Logs</th>" if show_sos_column else ""
 
     return f"""
@@ -1249,10 +1249,14 @@ def department_dashboard():
                 th, td {{ padding: 12px; border-bottom: 1px solid #ddd; vertical-align: top; font-size: 14px; }}
                 th {{ background: #f8f9fa; color: #333; position: sticky; top: 0; }}
                 tr:hover {{ background-color: #f1f1f1; }}
-                a.btn {{ font-size: 14px; color: #1a73e8; text-decoration: none; font-weight: bold; display: inline-block; margin-top: 20px; background: white; padding: 8px 16px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e0e0e0; }}
+                /* Changed margin-top to margin-bottom here */
+                a.btn {{ font-size: 14px; color: #1a73e8; text-decoration: none; font-weight: bold; display: inline-block; margin-bottom: 20px; background: white; padding: 8px 16px; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #e0e0e0; transition: all 0.2s ease; }}
+                a.btn:hover {{ background: #f8f9fa; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }}
             </style>
         </head>
         <body>
+            <a href="/admin" class="btn">⬅ Back to Master Admin</a>
+            
             <div class="header">
                 <div>
                     <h1 style="margin:0;">🔒 Secure Department Portal</h1>
@@ -1285,7 +1289,6 @@ def department_dashboard():
                     {table_rows}
                 </table>
             </div>
-            <a href="/admin" class="btn">⬅ Back to Master Admin</a>
         </body>
     </html>
     """

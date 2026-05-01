@@ -382,9 +382,14 @@ export function Technology() {
             <p className="text-white/90 mb-6 max-w-2xl mx-auto">
               This entire project is open-source. Explore our codebase, contribute, or learn from our implementation.
             </p>
-            <button className="px-8 py-3 bg-white text-indigo-600 font-medium rounded-full hover:shadow-xl transition-shadow">
+            <a 
+              href="https://github.com/Vai201/Rail-Madad-Chatbot" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="inline-block px-8 py-3 bg-white text-indigo-600 font-medium rounded-full hover:shadow-xl transition-shadow"
+            >
               View on GitHub
-            </button>
+            </a>
           </motion.div>
         </div>
       </section>
