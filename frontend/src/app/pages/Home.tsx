@@ -355,14 +355,14 @@ export function Home() {
 
               <div className="flex justify-center gap-4 flex-wrap">
                 <a
-                  href="mailto:your.email@example.com"
+                  href="vaibhavnemani2005@gmail.com"
                   className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors"
                 >
                   <Mail className="size-4" />
                   <span className="text-sm">Email</span>
                 </a>
                 <a
-                  href="https://github.com/yourusername"
+                  href="https://github.com/Vai201"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-full transition-colors"

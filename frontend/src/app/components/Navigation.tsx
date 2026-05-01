@@ -26,7 +26,7 @@ export function Navigation() {
           {/* Logo */}
           <Link to="/" className="flex items-center gap-3 group">
             <img
-              src="/src/imports/swarail-logo.png"
+              src="/images/swarail-logo.png"
               alt="Swarail Logo"
               className="size-12 object-contain group-hover:scale-105 transition-transform"
             />

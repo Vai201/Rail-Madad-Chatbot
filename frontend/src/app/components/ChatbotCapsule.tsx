@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Send, Sparkles, Globe, ChevronDown, Paperclip, Loader2, Navigation, AlertTriangle, MessageSquare } from "lucide-react";
+import { X, Send, Sparkles, Globe, ChevronDown, Paperclip, Loader2, Navigation, AlertTriangle, MessageSquare, ShieldCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const BACKEND_URL = 'https://rail-madad-chatbot-1094417494880.asia-south1.run.app';
@@ -34,6 +34,10 @@ export function ChatbotCapsule() {
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null);
   const [attachmentName, setAttachmentName] = useState<string | null>(null);
   
+  // --- DISCLAIMER MODAL STATE ---
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [isTermsChecked, setIsTermsChecked] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sessionIdRef = useRef("session-" + Math.random().toString(36).substring(7));
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -47,6 +51,20 @@ export function ChatbotCapsule() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
+
+  // --- CHECK FOR SESSION STORAGE ON LOAD ---
+  useEffect(() => {
+    // sessionStorage only exists in the browser, so this is safe for Next.js/React
+    const accepted = sessionStorage.getItem('railbot-terms-accepted');
+    if (!accepted) {
+      setShowTermsModal(true);
+    }
+  }, []);
+
+  const handleAcceptTerms = () => {
+    sessionStorage.setItem('railbot-terms-accepted', 'true');
+    setShowTermsModal(false);
+  };
 
   useEffect(() => {
     const handleRemoteTracking = () => {
@@ -144,7 +162,6 @@ export function ChatbotCapsule() {
     e.preventDefault();
     if (!message.trim() && !attachmentUrl) return;
 
-    // 🚨 FIX: Capture variables securely BEFORE resetting the input states! 🚨
     const userText = message;
     const currentAttachmentUrl = attachmentUrl; 
     const displayMessage = message || "Sent an attachment 📎";
@@ -235,315 +252,383 @@ export function ChatbotCapsule() {
   };
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+    <>
+      {/* --- DISCLAIMER OVERLAY MODAL --- */}
       <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 w-[400px] max-w-[calc(100vw-2rem)]"
+        {showTermsModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/60 backdrop-blur-md px-4"
           >
-            <div className="bg-white rounded-3xl shadow-2xl border border-indigo-100 overflow-hidden flex flex-col h-[560px]">
+            <motion.div
+              initial={{ scale: 0.95, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="bg-white rounded-3xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200"
+            >
+              {/* Header */}
+              <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-6 py-5 flex items-center gap-3">
+                <ShieldCheck className="size-7 text-white" />
+                <div>
+                  <h2 className="text-white font-bold text-lg leading-tight">Privacy & Prototype Notice</h2>
+                  <p className="text-indigo-100 text-xs">Please read before continuing</p>
+                </div>
+              </div>
               
-              <div className={`px-4 py-3.5 flex items-center justify-between shadow-md z-10 transition-colors ${chatMode === 'sos_active' ? 'bg-gradient-to-r from-rose-600 to-red-600' : 'bg-gradient-to-r from-indigo-600 to-blue-600'}`}>
-                <div className="flex items-center gap-3">
-                  <div className="relative">
-                    <div className="size-8 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30">
-                      <Sparkles className="size-4 text-white" />
-                    </div>
-                    <div className="absolute bottom-0 right-0 size-2.5 bg-green-400 rounded-full border-2 border-white animate-pulse" />
-                  </div>
-                  <div>
-                    <span className="text-white font-bold text-sm block leading-tight">RailBot Assistant</span>
-                    <span className="text-[10px] text-white/80 uppercase tracking-widest font-semibold">
-                      {chatMode === 'sos_active' ? "🚨 SOS MODE ACTIVE" : "Live AI Agent"}
-                    </span>
-                  </div>
+              {/* Content */}
+              <div className="p-6">
+                <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-6 text-sm text-slate-600 space-y-3 leading-relaxed">
+                  <p>
+                    <span className="font-bold text-slate-800">Not an Official Service:</span> This platform is a <strong>working prototype</strong> built for demonstration purposes. We are <strong>NOT affiliated</strong> with Indian Railways, IRCTC, or the Government of India.
+                  </p>
+                  <p>
+                    <span className="font-bold text-slate-800">Privacy Assurance:</span> To fully experience the chatbot's tracking and complaint capabilities, you will be asked to provide your contact number. Your privacy is strictly maintained. The data is secured, never shared, and used <strong>solely</strong> for the functionality of this prototype.
+                  </p>
                 </div>
                 
-                <div className="flex items-center gap-2">
-                  <div className="relative">
-                    <button 
-                      onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
-                      className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 border border-white/20 transition-all rounded-full px-3 py-1.5 backdrop-blur-md text-white text-xs font-bold shadow-sm"
-                    >
-                      <Globe className="size-3.5 text-white/90" />
-                      <span>{currentLangLabel}</span>
-                      <ChevronDown className={`size-3.5 transition-transform duration-300 ${isLangMenuOpen ? 'rotate-180' : ''}`} />
-                    </button>
-
-                    <AnimatePresence>
-                      {isLangMenuOpen && (
-                        <>
-                          <div className="fixed inset-0 z-40" onClick={() => setIsLangMenuOpen(false)} />
-                          <motion.div
-                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                            className="absolute top-full right-0 mt-2 w-36 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 origin-top-right"
-                          >
-                            <div className="py-1.5 px-1.5 flex flex-col gap-1">
-                              {SUPPORTED_LANGUAGES.map((lang) => (
-                                <button
-                                  key={lang.code}
-                                  onClick={() => {
-                                    setIsLangMenuOpen(false);
-                                    handleLanguageChange(lang.code);
-                                  }}
-                                  className={`w-full flex items-center justify-between px-3 py-2 text-sm rounded-xl transition-all ${
-                                    language === lang.code 
-                                      ? 'bg-indigo-50 text-indigo-700 font-bold' 
-                                      : 'text-slate-600 hover:bg-slate-50 hover:text-indigo-600 font-medium'
-                                  }`}
-                                >
-                                  {lang.label}
-                                  {language === lang.code && <div className="size-1.5 rounded-full bg-indigo-600 shadow-sm" />}
-                                </button>
-                              ))}
-                            </div>
-                          </motion.div>
-                        </>
-                      )}
-                    </AnimatePresence>
+                {/* Checkbox */}
+                <label className="flex items-start gap-3 cursor-pointer mb-6 p-4 rounded-xl border-2 border-transparent hover:border-indigo-50 hover:bg-indigo-50/50 transition-all group">
+                  <div className="flex-shrink-0 mt-0.5">
+                    <input 
+                      type="checkbox" 
+                      checked={isTermsChecked}
+                      onChange={(e) => setIsTermsChecked(e.target.checked)}
+                      className="size-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer transition-colors"
+                    />
                   </div>
+                  <span className="text-sm text-slate-700 font-medium group-hover:text-slate-900 transition-colors">
+                    I acknowledge that this is an independent prototype and I consent to securely providing my phone number for testing.
+                  </span>
+                </label>
 
-                  <button
-                    onClick={() => setIsOpen(false)}
-                    className="size-7 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
-                  >
-                    <X className="size-4" />
-                  </button>
-                </div>
+                {/* Button */}
+                <button
+                  disabled={!isTermsChecked}
+                  onClick={handleAcceptTerms}
+                  className="w-full py-3.5 px-4 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold rounded-xl transition-all shadow-sm active:scale-[0.98]"
+                >
+                  I Agree & Continue
+                </button>
               </div>
-
-              <div className={`flex-1 p-4 overflow-y-auto scroll-smooth ${chatMode === 'sos_active' ? 'bg-rose-50/30' : 'bg-slate-50/50'}`}>
-                
-                {messages.length === 0 && !isLoading && (
-                   <div className="flex flex-col items-center justify-center py-6 animate-in fade-in zoom-in duration-500">
-                      <div className="size-16 bg-indigo-100 rounded-full flex items-center justify-center text-3xl mb-3 shadow-inner">👋</div>
-                      <p className="text-slate-500 font-bold text-sm mb-6">How can we help you today?</p>
-                      
-                      <div className="w-full flex flex-col gap-3 px-2">
-                        <button 
-                          onClick={() => { setChatMode('normal'); sendMessageToApi("Hi", true); }} 
-                          className="flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:border-indigo-400 hover:shadow-md transition-all text-left group"
-                        >
-                          <div className="bg-indigo-50 p-2.5 rounded-full text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
-                            <MessageSquare className="size-5" />
-                          </div>
-                          <div>
-                            <div className="font-bold text-slate-800 text-sm">New Query / Complaint</div>
-                            <div className="text-xs text-slate-500">Ask a question or file an issue</div>
-                          </div>
-                        </button>
-                        
-                        <button 
-                          onClick={() => { 
-                            setChatMode('tracking'); 
-                            setMessages([{id: '1', role: 'bot', text: "Please enter your 10-digit mobile number to track your open complaints."}]); 
-                          }} 
-                          className="flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all text-left group"
-                        >
-                          <div className="bg-blue-50 p-2.5 rounded-full text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                            <Navigation className="size-5" />
-                          </div>
-                          <div>
-                            <div className="font-bold text-slate-800 text-sm">Track Complaint</div>
-                            <div className="text-xs text-slate-500">Check live resolution status</div>
-                          </div>
-                        </button>
-
-                        <button 
-                          onClick={() => { 
-                            setChatMode('sos_auth'); 
-                            setMessages([{id: '1', role: 'bot', text: "🚨 <b>SOS MODE:</b> Please enter your Complaint ID (e.g., C-45) to verify."}]); 
-                          }} 
-                          className="flex items-center gap-4 bg-rose-50 p-4 rounded-2xl shadow-sm border border-rose-200 hover:border-rose-400 hover:shadow-md transition-all text-left group"
-                        >
-                          <div className="bg-rose-100 p-2.5 rounded-full text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition-colors">
-                            <AlertTriangle className="size-5" />
-                          </div>
-                          <div>
-                            <div className="font-bold text-rose-800 text-sm">SOS Emergency</div>
-                            <div className="text-xs text-rose-600">48-Hour Live Tactical Assistance</div>
-                          </div>
-                        </button>
-                      </div>
-                   </div>
-                )}
-
-                {messages.map((msg, index) => {
-                  const isLastMessage = index === messages.length - 1;
-                  const isEmergency = msg.text.includes('🚨');
-                  
-                  return (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      key={msg.id} 
-                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2.5 mb-5`}
-                    >
-                      {msg.role === 'bot' && (
-                        <div className={`size-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-sm border ${isEmergency || chatMode === 'sos_active' ? 'bg-gradient-to-br from-rose-500 to-red-500 border-rose-200' : 'bg-gradient-to-br from-indigo-500 to-blue-500 border-indigo-200'}`}>
-                          <Sparkles className="size-4 text-white" />
-                        </div>
-                      )}
-                      
-                      <div className={`max-w-[85%] flex flex-col gap-1.5 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                        <div 
-                          className={`px-4 py-2.5 text-sm shadow-sm leading-relaxed rounded-2xl ${
-                            msg.role === 'user' 
-                              ? 'bg-gradient-to-br from-indigo-600 to-blue-600 text-white rounded-tr-sm border border-indigo-700' 
-                              : isEmergency || chatMode === 'sos_active'
-                                ? 'bg-rose-50 text-rose-900 rounded-tl-sm border border-rose-200 shadow-rose-100 font-medium'
-                                : 'bg-white text-slate-800 rounded-tl-sm border border-slate-200'
-                          }`}
-                          dangerouslySetInnerHTML={{ __html: msg.text }}
-                        />
-
-                        {msg.role === 'bot' && msg.buttons && msg.buttons.length > 0 && isLastMessage && (
-                          <div className="flex flex-wrap gap-2 mt-1">
-                            {msg.buttons.map((btn, i) => (
-                              <motion.button 
-                                whileHover={{ scale: 1.02 }}
-                                whileTap={{ scale: 0.98 }}
-                                key={i}
-                                onClick={() => sendMessageToApi(btn.text)}
-                                className="bg-white border border-indigo-200 text-indigo-600 px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-indigo-50 hover:border-indigo-300 transition-colors shadow-sm"
-                              >
-                                {btn.text}
-                              </motion.button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </motion.div>
-                  );
-                })}
-
-                {isLoading && (
-                  <div className="flex justify-start gap-2.5 mb-5">
-                    <div className="size-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-sm bg-gradient-to-br from-indigo-500 to-blue-500 border-indigo-200">
-                      <Sparkles className="size-4 text-white" />
-                    </div>
-                    <div className="px-5 py-3 text-[11px] bg-white text-slate-400 rounded-2xl rounded-tl-sm border border-slate-200 italic shadow-sm flex items-center gap-1.5">
-                      <span className="flex gap-0.5">
-                        <span className="size-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="size-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="size-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                      </span>
-                    </div>
-                  </div>
-                )}
-                
-                <div ref={messagesEndRef} />
-              </div>
-
-              <form 
-                onSubmit={handleSubmit} 
-                className={`p-3 border-t flex flex-col gap-2 transition-colors ${chatMode === 'sos_active' || chatMode === 'sos_auth' ? 'bg-rose-50 border-rose-100' : 'bg-white border-slate-100'}`}
-              >
-                
-                {attachmentName && (
-                  <div className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg text-xs font-medium w-fit border border-indigo-100">
-                    <Paperclip className="size-3.5" />
-                    <span className="truncate max-w-[200px]">{attachmentName}</span>
-                    <button type="button" onClick={() => { setAttachmentUrl(null); setAttachmentName(null); }} className="hover:text-indigo-900 ml-1">
-                      <X className="size-3" />
-                    </button>
-                  </div>
-                )}
-
-                <div className="flex gap-2 relative items-center">
-                  <input 
-                    type="file" 
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    accept="image/*,video/*"
-                    className="hidden" 
-                  />
-                  
-                  {allowMediaUpload && chatMode === 'normal' && (
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isUploading}
-                      className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition-colors disabled:opacity-50"
-                      title="Attach Photo or Video"
-                    >
-                      {isUploading ? <Loader2 className="size-4 animate-spin" /> : <Paperclip className="size-4" />}
-                    </button>
-                  )}
-
-                  <input
-                    type={isTrackingOrPhone ? "tel" : "text"}
-                    value={message}
-                    onChange={(e) => {
-                      if (isTrackingOrPhone) {
-                        const onlyNums = e.target.value.replace(/\D/g, '');
-                        if (onlyNums.length <= 10) setMessage(onlyNums);
-                      } else {
-                        setMessage(e.target.value);
-                      }
-                    }}
-                    placeholder={chatMode === 'sos_active' ? "Describe your emergency..." : isTrackingOrPhone ? "Enter 10-digit number..." : allowMediaUpload ? "Describe issue & attach photo..." : "Type your message..."}
-                    className={`flex-1 pl-4 pr-12 py-3 rounded-full border focus:outline-none focus:ring-2 text-sm transition-all shadow-inner ${
-                      chatMode === 'sos_active' || chatMode === 'sos_auth' 
-                        ? 'bg-white border-rose-200 focus:ring-rose-500/20 focus:border-rose-500' 
-                        : 'bg-slate-50 border-slate-200 focus:ring-indigo-500/20 focus:border-indigo-500'
-                    }`}
-                  />
-                  
-                  <button
-                    type="submit"
-                    className={`absolute right-1 top-1 bottom-1 aspect-square rounded-full flex items-center justify-center text-white hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
-                      chatMode === 'sos_active' || chatMode === 'sos_auth'
-                        ? 'bg-gradient-to-br from-rose-600 to-red-600'
-                        : 'bg-gradient-to-br from-indigo-600 to-blue-600'
-                    }`}
-                    disabled={
-                      (!message.trim() && !attachmentUrl) || 
-                      isLoading || 
-                      isUploading || 
-                      (isTrackingOrPhone && message.toLowerCase() !== 'cancel' && message.replace(/\D/g, '').length !== 10)
-                    }
-                  >
-                    <Send className="size-4" />
-                  </button>
-                </div>
-              </form>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <motion.button
-        onClick={() => setIsOpen(!isOpen)}
-        className="relative group"
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-      >
-        <div className="px-6 py-3.5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-blue-600 rounded-full shadow-xl hover:shadow-2xl transition-all flex items-center gap-3 border border-white/10">
-          <motion.div
-            animate={isOpen ? { rotate: 0 } : { rotate: 360 }}
-            transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-            className="size-6 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm"
-          >
-            <Sparkles className="size-4 text-white" />
-          </motion.div>
-          <span className="text-white font-bold text-sm tracking-wide">Ask RailBot</span>
-          {!isOpen && (
+      {/* --- THE CHATBOT CAPSULE --- */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+        <AnimatePresence>
+          {isOpen && (
             <motion.div
-              animate={{ scale: [1, 1.3, 1], opacity: [1, 0.5, 1] }}
-              transition={{ duration: 2, repeat: Infinity }}
-              className="absolute -top-1 -right-1 size-3.5 bg-green-400 rounded-full border-2 border-white shadow-sm"
-            />
-          )}
-        </div>
+              initial={{ opacity: 0, y: 20, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 20, scale: 0.95 }}
+              className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 w-[400px] max-w-[calc(100vw-2rem)]"
+            >
+              <div className="bg-white rounded-3xl shadow-2xl border border-indigo-100 overflow-hidden flex flex-col h-[560px]">
+                
+                <div className={`px-4 py-3.5 flex items-center justify-between shadow-md z-10 transition-colors ${chatMode === 'sos_active' ? 'bg-gradient-to-r from-rose-600 to-red-600' : 'bg-gradient-to-r from-indigo-600 to-blue-600'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <div className="size-8 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30">
+                        <Sparkles className="size-4 text-white" />
+                      </div>
+                      <div className="absolute bottom-0 right-0 size-2.5 bg-green-400 rounded-full border-2 border-white animate-pulse" />
+                    </div>
+                    <div>
+                      <span className="text-white font-bold text-sm block leading-tight">RailBot Assistant</span>
+                      <span className="text-[10px] text-white/80 uppercase tracking-widest font-semibold">
+                        {chatMode === 'sos_active' ? "🚨 SOS MODE ACTIVE" : "Live AI Agent"}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <button 
+                        onClick={() => setIsLangMenuOpen(!isLangMenuOpen)}
+                        className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 border border-white/20 transition-all rounded-full px-3 py-1.5 backdrop-blur-md text-white text-xs font-bold shadow-sm"
+                      >
+                        <Globe className="size-3.5 text-white/90" />
+                        <span>{currentLangLabel}</span>
+                        <ChevronDown className={`size-3.5 transition-transform duration-300 ${isLangMenuOpen ? 'rotate-180' : ''}`} />
+                      </button>
 
-        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-full blur-xl opacity-40 group-hover:opacity-70 transition-opacity -z-10" />
-      </motion.button>
-    </div>
+                      <AnimatePresence>
+                        {isLangMenuOpen && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setIsLangMenuOpen(false)} />
+                            <motion.div
+                              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                              className="absolute top-full right-0 mt-2 w-36 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 origin-top-right"
+                            >
+                              <div className="py-1.5 px-1.5 flex flex-col gap-1">
+                                {SUPPORTED_LANGUAGES.map((lang) => (
+                                  <button
+                                    key={lang.code}
+                                    onClick={() => {
+                                      setIsLangMenuOpen(false);
+                                      handleLanguageChange(lang.code);
+                                    }}
+                                    className={`w-full flex items-center justify-between px-3 py-2 text-sm rounded-xl transition-all ${
+                                      language === lang.code 
+                                        ? 'bg-indigo-50 text-indigo-700 font-bold' 
+                                        : 'text-slate-600 hover:bg-slate-50 hover:text-indigo-600 font-medium'
+                                    }`}
+                                  >
+                                    {lang.label}
+                                    {language === lang.code && <div className="size-1.5 rounded-full bg-indigo-600 shadow-sm" />}
+                                  </button>
+                                ))}
+                              </div>
+                            </motion.div>
+                          </>
+                        )}
+                      </AnimatePresence>
+                    </div>
+
+                    <button
+                      onClick={() => setIsOpen(false)}
+                      className="size-7 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+                    >
+                      <X className="size-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className={`flex-1 p-4 overflow-y-auto scroll-smooth ${chatMode === 'sos_active' ? 'bg-rose-50/30' : 'bg-slate-50/50'}`}>
+                  
+                  {messages.length === 0 && !isLoading && (
+                     <div className="flex flex-col items-center justify-center py-6 animate-in fade-in zoom-in duration-500">
+                        <div className="size-16 bg-indigo-100 rounded-full flex items-center justify-center text-3xl mb-3 shadow-inner">👋</div>
+                        <p className="text-slate-500 font-bold text-sm mb-6">How can we help you today?</p>
+                        
+                        <div className="w-full flex flex-col gap-3 px-2">
+                          <button 
+                            onClick={() => { setChatMode('normal'); sendMessageToApi("Hi", true); }} 
+                            className="flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:border-indigo-400 hover:shadow-md transition-all text-left group"
+                          >
+                            <div className="bg-indigo-50 p-2.5 rounded-full text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                              <MessageSquare className="size-5" />
+                            </div>
+                            <div>
+                              <div className="font-bold text-slate-800 text-sm">New Query / Complaint</div>
+                              <div className="text-xs text-slate-500">Ask a question or file an issue</div>
+                            </div>
+                          </button>
+                          
+                          <button 
+                            onClick={() => { 
+                              setChatMode('tracking'); 
+                              setMessages([{id: '1', role: 'bot', text: "Please enter your 10-digit mobile number to track your open complaints."}]); 
+                            }} 
+                            className="flex items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200 hover:border-blue-400 hover:shadow-md transition-all text-left group"
+                          >
+                            <div className="bg-blue-50 p-2.5 rounded-full text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                              <Navigation className="size-5" />
+                            </div>
+                            <div>
+                              <div className="font-bold text-slate-800 text-sm">Track Complaint</div>
+                              <div className="text-xs text-slate-500">Check live resolution status</div>
+                            </div>
+                          </button>
+
+                          <button 
+                            onClick={() => { 
+                              setChatMode('sos_auth'); 
+                              setMessages([{id: '1', role: 'bot', text: "🚨 <b>SOS MODE:</b> Please enter your Complaint ID (e.g., C-45) to verify."}]); 
+                            }} 
+                            className="flex items-center gap-4 bg-rose-50 p-4 rounded-2xl shadow-sm border border-rose-200 hover:border-rose-400 hover:shadow-md transition-all text-left group"
+                          >
+                            <div className="bg-rose-100 p-2.5 rounded-full text-rose-600 group-hover:bg-rose-600 group-hover:text-white transition-colors">
+                              <AlertTriangle className="size-5" />
+                            </div>
+                            <div>
+                              <div className="font-bold text-rose-800 text-sm">SOS Emergency</div>
+                              <div className="text-xs text-rose-600">48-Hour Live Tactical Assistance</div>
+                            </div>
+                          </button>
+                        </div>
+                     </div>
+                  )}
+
+                  {messages.map((msg, index) => {
+                    const isLastMessage = index === messages.length - 1;
+                    const isEmergency = msg.text.includes('🚨');
+                    
+                    return (
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        key={msg.id} 
+                        className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} gap-2.5 mb-5`}
+                      >
+                        {msg.role === 'bot' && (
+                          <div className={`size-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-sm border ${isEmergency || chatMode === 'sos_active' ? 'bg-gradient-to-br from-rose-500 to-red-500 border-rose-200' : 'bg-gradient-to-br from-indigo-500 to-blue-500 border-indigo-200'}`}>
+                            <Sparkles className="size-4 text-white" />
+                          </div>
+                        )}
+                        
+                        <div className={`max-w-[85%] flex flex-col gap-1.5 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                          <div 
+                            className={`px-4 py-2.5 text-sm shadow-sm leading-relaxed rounded-2xl ${
+                              msg.role === 'user' 
+                                ? 'bg-gradient-to-br from-indigo-600 to-blue-600 text-white rounded-tr-sm border border-indigo-700' 
+                                : isEmergency || chatMode === 'sos_active'
+                                  ? 'bg-rose-50 text-rose-900 rounded-tl-sm border border-rose-200 shadow-rose-100 font-medium'
+                                  : 'bg-white text-slate-800 rounded-tl-sm border border-slate-200'
+                            }`}
+                            dangerouslySetInnerHTML={{ __html: msg.text }}
+                          />
+
+                          {msg.role === 'bot' && msg.buttons && msg.buttons.length > 0 && isLastMessage && (
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {msg.buttons.map((btn, i) => (
+                                <motion.button 
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  key={i}
+                                  onClick={() => sendMessageToApi(btn.text)}
+                                  className="bg-white border border-indigo-200 text-indigo-600 px-3 py-1.5 rounded-full text-xs font-semibold hover:bg-indigo-50 hover:border-indigo-300 transition-colors shadow-sm"
+                                >
+                                  {btn.text}
+                                </motion.button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+
+                  {isLoading && (
+                    <div className="flex justify-start gap-2.5 mb-5">
+                      <div className="size-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 shadow-sm bg-gradient-to-br from-indigo-500 to-blue-500 border-indigo-200">
+                        <Sparkles className="size-4 text-white" />
+                      </div>
+                      <div className="px-5 py-3 text-[11px] bg-white text-slate-400 rounded-2xl rounded-tl-sm border border-slate-200 italic shadow-sm flex items-center gap-1.5">
+                        <span className="flex gap-0.5">
+                          <span className="size-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="size-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="size-1.5 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div ref={messagesEndRef} />
+                </div>
+
+                <form 
+                  onSubmit={handleSubmit} 
+                  className={`p-3 border-t flex flex-col gap-2 transition-colors ${chatMode === 'sos_active' || chatMode === 'sos_auth' ? 'bg-rose-50 border-rose-100' : 'bg-white border-slate-100'}`}
+                >
+                  
+                  {attachmentName && (
+                    <div className="flex items-center gap-2 bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg text-xs font-medium w-fit border border-indigo-100">
+                      <Paperclip className="size-3.5" />
+                      <span className="truncate max-w-[200px]">{attachmentName}</span>
+                      <button type="button" onClick={() => { setAttachmentUrl(null); setAttachmentName(null); }} className="hover:text-indigo-900 ml-1">
+                        <X className="size-3" />
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 relative items-center">
+                    <input 
+                      type="file" 
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                      accept="image/*,video/*"
+                      className="hidden" 
+                    />
+                    
+                    {allowMediaUpload && chatMode === 'normal' && (
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploading}
+                        className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full transition-colors disabled:opacity-50"
+                        title="Attach Photo or Video"
+                      >
+                        {isUploading ? <Loader2 className="size-4 animate-spin" /> : <Paperclip className="size-4" />}
+                      </button>
+                    )}
+
+                    <input
+                      type={isTrackingOrPhone ? "tel" : "text"}
+                      value={message}
+                      onChange={(e) => {
+                        if (isTrackingOrPhone) {
+                          const onlyNums = e.target.value.replace(/\D/g, '');
+                          if (onlyNums.length <= 10) setMessage(onlyNums);
+                        } else {
+                          setMessage(e.target.value);
+                        }
+                      }}
+                      placeholder={chatMode === 'sos_active' ? "Describe your emergency..." : isTrackingOrPhone ? "Enter 10-digit number..." : allowMediaUpload ? "Describe issue & attach photo..." : "Type your message..."}
+                      className={`flex-1 pl-4 pr-12 py-3 rounded-full border focus:outline-none focus:ring-2 text-sm transition-all shadow-inner ${
+                        chatMode === 'sos_active' || chatMode === 'sos_auth' 
+                          ? 'bg-white border-rose-200 focus:ring-rose-500/20 focus:border-rose-500' 
+                          : 'bg-slate-50 border-slate-200 focus:ring-indigo-500/20 focus:border-indigo-500'
+                      }`}
+                    />
+                    
+                    <button
+                      type="submit"
+                      className={`absolute right-1 top-1 bottom-1 aspect-square rounded-full flex items-center justify-center text-white hover:shadow-lg transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+                        chatMode === 'sos_active' || chatMode === 'sos_auth'
+                          ? 'bg-gradient-to-br from-rose-600 to-red-600'
+                          : 'bg-gradient-to-br from-indigo-600 to-blue-600'
+                      }`}
+                      disabled={
+                        (!message.trim() && !attachmentUrl) || 
+                        isLoading || 
+                        isUploading || 
+                        (isTrackingOrPhone && message.toLowerCase() !== 'cancel' && message.replace(/\D/g, '').length !== 10)
+                      }
+                    >
+                      <Send className="size-4" />
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <motion.button
+          onClick={() => setIsOpen(!isOpen)}
+          className="relative group"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <div className="px-6 py-3.5 bg-gradient-to-r from-indigo-600 via-indigo-700 to-blue-600 rounded-full shadow-xl hover:shadow-2xl transition-all flex items-center gap-3 border border-white/10">
+            <motion.div
+              animate={isOpen ? { rotate: 0 } : { rotate: 360 }}
+              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+              className="size-6 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm"
+            >
+              <Sparkles className="size-4 text-white" />
+            </motion.div>
+            <span className="text-white font-bold text-sm tracking-wide">Ask RailBot</span>
+            {!isOpen && (
+              <motion.div
+                animate={{ scale: [1, 1.3, 1], opacity: [1, 0.5, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+                className="absolute -top-1 -right-1 size-3.5 bg-green-400 rounded-full border-2 border-white shadow-sm"
+              />
+            )}
+          </div>
+
+          <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-blue-500 rounded-full blur-xl opacity-40 group-hover:opacity-70 transition-opacity -z-10" />
+        </motion.button>
+      </div>
+    </>
   );
 }

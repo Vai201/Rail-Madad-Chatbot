@@ -6,73 +6,82 @@ const trainCategories = [
     name: "Vande Bharat Express",
     type: "Seater & Sleeper",
     image: "🚄",
+    imageUrl: "https://erail.in/images/info/Vande-Bharat.jpg",
     speed: "180 km/h",
     features: ["Indigenous", "AC", "WiFi", "Bio-Toilets"],
     description: "India's pride - fully air-conditioned, semi-high-speed trains",
-    gradient: "from-blue-500 to-purple-600",
   },
   {
     name: "Rajdhani Express",
     type: "Premium AC",
     image: "🚂",
+    imageUrl: "https://www.jiyobangla.com/upload/1/news/1704455211_photo_11zon_1-640x400.jpg",
     speed: "160 km/h",
     features: ["Fully AC", "Meals Included", "Priority", "Bedding"],
     description: "Connecting state capitals with unmatched luxury",
-    gradient: "from-red-500 to-orange-600",
   },
   {
     name: "Shatabdi Express",
     type: "Day Train",
     image: "⚡",
+    imageUrl: "https://images.indianexpress.com/2025/11/Mumbai-ahmedabad-shatabdi-express.jpg",
     speed: "150 km/h",
     features: ["AC Chair Car", "Meals", "Fast", "Comfortable"],
     description: "Premium day-time intercity travel experience",
-    gradient: "from-green-500 to-teal-600",
   },
   {
     name: "Tejas Express",
     type: "Premium Service",
     image: "💫",
+    imageUrl: "http://trak.in/wp-content/uploads/2017/05/Tejas-Express.jpg",
     speed: "200 km/h",
     features: ["Modern Coaches", "Entertainment", "WiFi", "Premium"],
     description: "Modern amenities with world-class service standards",
-    gradient: "from-indigo-500 to-blue-600",
   },
   {
     name: "Duronto Express",
     type: "Non-Stop",
     image: "🎯",
+    imageUrl: "https://tripzdude.com/wp-content/uploads/2023/11/f8wacm.jpg",
     speed: "160 km/h",
     features: ["Limited Stops", "Fast", "AC & Non-AC", "Long Distance"],
     description: "Non-stop service between major cities for faster travel",
-    gradient: "from-purple-500 to-pink-600",
   },
   {
     name: "Humsafar Express",
     type: "AC Sleeper",
     image: "🌙",
+    imageUrl: "https://i.ytimg.com/vi/v_Nokn6Pbxs/maxresdefault.jpg",
     speed: "130-160 km/h",
     features: ["All 3AC", "Bedding", "CCTV", "Secure"],
     description: "Comfortable overnight journey with enhanced security",
-    gradient: "from-cyan-500 to-blue-600",
   },
   {
     name: "Double Decker",
     type: "High Capacity",
     image: "🏢",
+    imageUrl: "https://i.pinimg.com/originals/e9/7d/ce/e97dce15709eadf5a3c24d579a7827c5.jpg",
     speed: "130 km/h",
     features: ["Two Levels", "AC Chair Car", "Spacious", "Unique"],
     description: "Innovative two-level design for increased capacity",
-    gradient: "from-orange-500 to-red-600",
   },
   {
     name: "LHB Express",
     type: "Standard & Superfast",
     image: "🚃",
+    imageUrl: "https://i.ytimg.com/vi/THIVviq3EBA/maxresdefault.jpg",
     speed: "110-130 km/h",
     features: ["Modern Coaches", "Safe", "Comfortable", "Reliable"],
     description: "German technology-based coaches for superior safety",
-    gradient: "from-slate-500 to-gray-600",
+  },
+  {
+    name: "Maharaja Express",
+    type: "Ultra-Luxury",
+    image: "👑",
+    imageUrl: "https://www.peakadventuretour.com/assets/images/maharaja-express-train_banner.webp",
+    speed: "70-80 km/h",
+    features: ["Luxury", "Royal Suites", "Guided Excursions", "Multi-City"],
+    description: "Experience India's regal heritage aboard the world's leading Luxury Train",
   },
 ];
 
@@ -112,15 +121,26 @@ export function Trains() {
                 className="group"
               >
                 <div className="bg-white rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl transition-all border border-slate-200">
-                  {/* Header with Gradient */}
-                  <div className={`bg-gradient-to-br ${train.gradient} p-6 relative overflow-hidden`}>
-                    <div className="absolute top-0 right-0 text-9xl opacity-10 transform translate-x-8 -translate-y-4">
-                      {train.image}
-                    </div>
-                    <div className="relative">
-                      <div className="text-5xl mb-3">{train.image}</div>
-                      <h3 className="text-2xl font-bold text-white mb-1">{train.name}</h3>
-                      <p className="text-white/90 text-sm">{train.type}</p>
+                  
+                  {/* --- HEADER WITH IMAGE & UNIVERSAL DARK OVERLAY --- */}
+                  <div className="relative h-56 overflow-hidden">
+                    {/* Background Image */}
+                    <img 
+                      src={train.imageUrl} 
+                      alt={train.name} 
+                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-in-out"
+                    />
+                    
+                    {/* Universal Dark Overlay for Text Readability */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-slate-900/40 to-transparent" />
+                    
+                    {/* Header Content */}
+                    <div className="absolute inset-0 p-6 flex flex-col justify-end z-10">
+                      <div className="absolute top-4 right-4 text-4xl drop-shadow-md">
+                        {train.image}
+                      </div>
+                      <h3 className="text-2xl font-bold text-white mb-1 drop-shadow-md">{train.name}</h3>
+                      <p className="text-white/90 text-sm font-medium drop-shadow-md">{train.type}</p>
                     </div>
                   </div>
 
