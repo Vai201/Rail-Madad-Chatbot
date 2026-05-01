@@ -535,36 +535,87 @@ def get_agency_name(pnr_str):
 def get_random_closing_statement(dept):
     statements = {
         "Catering & Food": [
-            "The Pantry management has been fined ₹10 Lakhs.",
-            "The catering contract has been terminated due to hygiene violations.",
-            "Strict warning issued to the service provider."
+            "The catering service provider has been heavily penalized for the reported lapse.",
+            "A formal warning has been issued to the pantry manager regarding quality standards.",
+            "The vendor has been fined, and food safety inspectors have been notified.",
+            "The on-board catering staff has been reprimanded and replaced at the next major station.",
+            "The issue was escalated to IRCTC management and resolved immediately.",
+            "A show-cause notice has been issued to the contractor for violation of service terms."
         ],
         "Sanitation & Cleaning": [
-            "The issue has been resolved; the coach has been deep cleaned.",
-            "On-board housekeeping staff has been penalized.",
-            "Water and sanitation levels restored."
+            "The on-board housekeeping staff (OBHS) has attended to the coach and resolved the issue.",
+            "The designated cleaning vendor has been penalized for negligence.",
+            "Sanitation staff thoroughly cleaned the affected area at the next station.",
+            "The garbage/clog has been cleared and the coach has been fully sanitized.",
+            "The supervisor has inspected the area and confirmed that cleaning standards are restored."
         ],
         "Maintenance & Electrical": [
-            "The electrical fault has been rectified by the technician.",
-            "The component has been replaced; AC/Lights are now functional.",
-            "Issue noted; maintenance will be completed at the primary depot."
+            "The technical staff attended to the coach and repaired the defective equipment.",
+            "The electrical component has been fixed and is now fully functional.",
+            "Temporary repairs were made on-board; full replacement is scheduled at the primary maintenance depot.",
+            "The maintenance team resolved the hardware issue during the train's scheduled halt.",
+            "The defective fixture has been replaced by the onboard technical team.",
+            "The issue has been safely isolated to ensure passenger safety, pending depot repair."
         ],
         "Security": [
-            "The RPF has been informed and is investigating.",
-            "Action has been taken by the on-duty RPF personnel.",
-            "Security patrol has been increased in the affected coach."
+            "The Railway Protection Force (RPF) has intervened and the situation is under control.",
+            "An FIR has been registered and an official investigation is underway.",
+            "Security personnel have escorted the disruptive individuals off the train.",
+            "On-duty RPF staff have recorded the passenger's statement and increased coach patrols.",
+            "The matter has been handed over to the Government Railway Police (GRP) at the next station."
         ],
         "Medical Assistance": [
-            "The doctor will be attending to the passenger at the next station.",
-            "Medical help has been provided to the person in need.",
-            "Emergency medical services have been alerted."
+            "A railway medical officer attended to the passenger at the next scheduled halt.",
+            "Emergency first-aid was provided on board by the train superintendent and assisting doctors.",
+            "An ambulance and medical team were kept on standby and successfully took over.",
+            "The passenger was safely de-boarded and transferred to the nearest railway hospital.",
+            "Essential medicines were arranged from the station pharmacy and provided to the passenger."
         ],
-        "General": ["The complaint will be attended by our support team shortly."],
-        "Default": ["The issue has been resolved and verified."]
+        "Water Supply": [
+            "Water tanks were fully refilled at the next designated watering station.",
+            "The pipeline block was cleared and water supply has been completely restored.",
+            "Maintenance staff fixed the valve issue, ensuring proper water flow to the washrooms.",
+            "An emergency water refill was coordinated, and the issue has been successfully resolved.",
+            "The plumbing fault has been rectified and all taps are now operational."
+        ],
+        "Ticketing & Refunds": [
+            "The Ticket Checking Staff (TTE) has verified the records and resolved the seat dispute.",
+            "The passenger has been successfully accommodated in the designated berth.",
+            "The refund request has been officially logged and will be processed within 5-7 working days.",
+            "The discrepancy in the reservation chart has been corrected by the onboard staff.",
+            "A penalty was collected from the unauthorized passenger, and the seat was vacated."
+        ],
+        "Luggage & Parcels": [
+            "The parcel office has successfully traced the consignment and expedited its delivery.",
+            "A formal complaint has been logged with the lost property office for immediate tracing.",
+            "The misplaced luggage has been located and coordination for handover is in progress.",
+            "The parcel supervisor has been officially penalized for the mishandling and delay.",
+            "The damaged goods report has been filed and the claims process has been initiated."
+        ],
+        "Staff Behavior": [
+            "A show-cause notice has been issued to the concerned employee for unprofessional conduct.",
+            "The staff member has been temporarily taken off duty pending an internal inquiry.",
+            "A severe warning has been recorded in the employee's official service file.",
+            "The concerned supervisor has personally apologized to the passenger on behalf of the staff.",
+            "Mandatory behavioral counseling has been ordered for the reported personnel."
+        ],
+        "General": [
+            "The complaint has been successfully resolved by the respective railway department.",
+            "Appropriate administrative action has been taken by the division authorities.",
+            "The issue was attended to and verified as resolved by the onboard train manager.",
+            "Necessary instructions have been passed to the ground staff to prevent future occurrences.",
+            "The grievance has been closed following satisfactory intervention by the railway team."
+        ],
+        "Default": [
+            "The issue has been resolved and verified by railway authorities.",
+            "Complaint closed successfully after necessary action was taken.",
+            "The matter was investigated and resolved to satisfaction.",
+            "Action taken report has been filed and the ticket is now closed.",
+            "The grievance has been officially addressed by the assigned department."
+        ]
     }
-    if dept in ["Water Supply", "Maintenance & Electrical"]:
-        return random.choice(statements["Sanitation & Cleaning"])
     
+    # Return the exact statement for the department, or Default if not found
     return random.choice(statements.get(dept, statements["Default"]))
 
 def handle_complaint_logging(request_json):
@@ -1070,21 +1121,30 @@ def department_dashboard():
             mock_coach = f"{random.choice(['B','A','S'])}{hash(pnr) % 9 + 1}" if pnr and pnr != "UNRESERVED" and not str(pnr).startswith("REDACTED") else "N/A"
             mock_seat = str(hash(pnr) % 72 + 1) if pnr and pnr != "UNRESERVED" and not str(pnr).startswith("REDACTED") else "N/A"
             
-            # Keep Phone & PNR Masked for standard departments
+            # --- UPDATED RBAC MASKING LOGIC ---
             if selected_dept in ["Security", "Medical Assistance"]:
+                # Security/Medical sees everything
                 display_phone = phone
                 display_pnr = pnr
-            else:
-                display_phone = f"******{phone[-4:]}" if phone and len(phone) >= 4 else "REDACTED"
-                display_pnr = f"REDACTED (TK-{token[-4:]})" if token else "REDACTED"
-                
-            # 2. UPDATED LOGIC: Only Catering & Food masks the Coach and Seat!
-            if selected_dept != "Catering & Food":
                 display_coach = mock_coach
                 display_seat = mock_seat
-            else:
+            elif selected_dept == "Catering & Food":
+                # Catering sees nothing (No Coach, No Seat)
+                display_phone = f"******{phone[-4:]}" if phone and len(phone) >= 4 else "REDACTED"
+                display_pnr = f"REDACTED (TK-{token[-4:]})" if token else "REDACTED"
                 display_coach = "🔒 MASKED"
                 display_seat = "🔒 MASKED"
+            else:
+                # All other departments: Coach is VISIBLE, Seat is MASKED
+                display_phone = f"******{phone[-4:]}" if phone and len(phone) >= 4 else "REDACTED"
+                display_pnr = f"REDACTED (TK-{token[-4:]})" if token else "REDACTED"
+                display_coach = mock_coach
+                display_seat = "🔒 MASKED"
+            # ----------------------------------
+            
+            train_display = train_no if train_no else "N/A"
+            date_display = travel_date if travel_date else "N/A"
+            station_display = station if station else "Not Provided"
             
             train_display = train_no if train_no else "N/A"
             date_display = travel_date if travel_date else "N/A"
