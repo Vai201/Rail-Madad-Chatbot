@@ -53,11 +53,11 @@ const techStack: TechLogo[] = [
     angle: 180,
   },
   {
-    name: "IRCTC",
-    imageUrl: "https://indiadesignsystem.bombaydc.com/assets/india-designs/display/IRCTC/color.svg",
-    description: "Indian Railway Catering and Tourism Corporation integration",
-    role: "Booking Integration",
-    color: "from-indigo-500 to-indigo-600",
+    name: "Google Firebase",
+    imageUrl: "https://img.icons8.com/?size=100&id=62452&format=png&color=000000",
+    description: "Scalable global hosting with automated SSL and seamless CLI deployment",
+    role: "Deploying and Hosting",
+    color: "from-yellow-500 to-orange-600",
     angle: 225,
   },
   {

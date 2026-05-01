@@ -196,9 +196,14 @@ export function Intent() {
               <button className="px-6 py-3 bg-white text-indigo-600 font-medium rounded-full hover:shadow-xl transition-shadow">
                 Contact Us
               </button>
-              <button className="px-6 py-3 bg-white/10 backdrop-blur-sm text-white font-medium rounded-full border border-white/30 hover:bg-white/20 transition-colors">
+              <a 
+                href="https://github.com/Vai201/Rail-Madad-Chatbot" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="inline-block px-8 py-3 bg-white text-indigo-600 font-medium rounded-full hover:shadow-xl transition-shadow"
+              >
                 View on GitHub
-              </button>
+              </a>
             </div>
           </motion.div>
         </div>
