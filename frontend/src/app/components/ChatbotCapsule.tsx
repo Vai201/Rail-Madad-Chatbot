@@ -11,10 +11,18 @@ type Message = {
   buttons?: { text: string }[];
 };
 
+// Expanded to 10 Languages
 const SUPPORTED_LANGUAGES = [
   { code: 'en', label: 'English' },
-  { code: 'hi', label: 'हिंदी' },
-  { code: 'mr', label: 'मराठी' }
+  { code: 'hi', label: 'हिंदी (Hindi)' },
+  { code: 'mr', label: 'मराठी (Marathi)' },
+  { code: 'bn', label: 'বাংলা (Bengali)' },
+  { code: 'te', label: 'తెలుగు (Telugu)' },
+  { code: 'ta', label: 'தமிழ் (Tamil)' },
+  { code: 'gu', label: 'ગુજરાતી (Gujarati)' },
+  { code: 'ur', label: 'اردو (Urdu)' },
+  { code: 'kn', label: 'ಕನ್ನಡ (Kannada)' },
+  { code: 'or', label: 'ଓଡ଼ିଆ (Odia)' }
 ];
 
 export function ChatbotCapsule() {
@@ -328,7 +336,8 @@ export function ChatbotCapsule() {
               exit={{ opacity: 0, y: 20, scale: 0.95 }}
               className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 w-[400px] max-w-[calc(100vw-2rem)]"
             >
-              <div className="bg-white rounded-3xl shadow-2xl border border-indigo-100 overflow-hidden flex flex-col h-[560px]">
+              {/* FIXED: Added max-h-[85vh] to prevent header from cutting off on smaller laptop screens */}
+              <div className="bg-white rounded-3xl shadow-2xl border border-indigo-100 overflow-hidden flex flex-col h-[560px] max-h-[85vh]">
                 
                 <div className={`px-4 py-3.5 flex items-center justify-between shadow-md z-10 transition-colors ${chatMode === 'sos_active' ? 'bg-gradient-to-r from-rose-600 to-red-600' : 'bg-gradient-to-r from-indigo-600 to-blue-600'}`}>
                   <div className="flex items-center gap-3">
@@ -353,7 +362,7 @@ export function ChatbotCapsule() {
                         className="flex items-center gap-1.5 bg-white/10 hover:bg-white/20 border border-white/20 transition-all rounded-full px-3 py-1.5 backdrop-blur-md text-white text-xs font-bold shadow-sm"
                       >
                         <Globe className="size-3.5 text-white/90" />
-                        <span>{currentLangLabel}</span>
+                        <span className="truncate max-w-[60px]">{currentLangLabel}</span>
                         <ChevronDown className={`size-3.5 transition-transform duration-300 ${isLangMenuOpen ? 'rotate-180' : ''}`} />
                       </button>
 
@@ -365,7 +374,7 @@ export function ChatbotCapsule() {
                               initial={{ opacity: 0, y: 10, scale: 0.95 }}
                               animate={{ opacity: 1, y: 0, scale: 1 }}
                               exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                              className="absolute top-full right-0 mt-2 w-36 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 origin-top-right"
+                              className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-50 origin-top-right max-h-64 overflow-y-auto"
                             >
                               <div className="py-1.5 px-1.5 flex flex-col gap-1">
                                 {SUPPORTED_LANGUAGES.map((lang) => (
