@@ -1,2 +1,16 @@
+# Environment & Secret files
 .env
+*.env
+service_account.json
+*.json
+
+# Python cache & virtual environment
 .venv/
+venv/
+__pycache__/
+*.pyc
+
+# IDE settings & OS junk
+.vscode/
+.idea/
+.DS_Store

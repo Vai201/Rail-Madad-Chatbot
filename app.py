@@ -183,7 +183,7 @@ def process_passenger_query(phone_number, user_query):
         User's Query: "{user_query}"
         """
 
-        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview') 
+        model = genai.GenerativeModel('gemini-3.1-flash-lite') 
         response = model.generate_content(strict_prompt)
         ai_response_text = response.text
 
@@ -1388,7 +1388,7 @@ def handle_sos():
         5. Be calm and authoritative.
         """
         
-        model = genai.GenerativeModel('gemini-3.1-flash-lite-preview')
+        model = genai.GenerativeModel('gemini-3.1-flash-lite')
         response = model.generate_content(prompt)
         ai_reply = response.text
         
